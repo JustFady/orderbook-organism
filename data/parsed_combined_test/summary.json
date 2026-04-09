@@ -1,0 +1,17 @@
+{
+  "file_list": "data/file_names.txt",
+  "parser_path": "../parse_lob_blob.py",
+  "selected_count": 1,
+  "processed_files": 1,
+  "failed_files": 0,
+  "total_level_rows": 188800,
+  "total_ticks": 472,
+  "sides": {
+    "Ask": 94400,
+    "Bid": 94400
+  },
+  "timestamp_min": "2025-04-14T09:21:00.188288-04:00",
+  "timestamp_max": "2025-04-14T09:21:59.913927-04:00",
+  "elapsed_seconds": 34.99660301208496,
+  "failures": []
+}
