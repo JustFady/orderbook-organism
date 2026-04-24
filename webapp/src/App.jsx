@@ -57,13 +57,13 @@ function interpolateFrame(current, next, alpha) {
 
   return {
     ...current,
-    liquidity_density_factor: lerp(current.liquidity_density_factor, next.liquidity_density_factor, alpha),
-    gamma_metabolism_factor: lerp(current.gamma_metabolism_factor, next.gamma_metabolism_factor, alpha),
-    manipulation_factor: lerp(current.manipulation_factor, next.manipulation_factor, alpha),
-    price_kinetic_factor: lerp(current.price_kinetic_factor, next.price_kinetic_factor, alpha),
-    health_score: lerp(current.health_score, next.health_score, alpha),
-    side_imbalance: lerp(current.side_imbalance, next.side_imbalance, alpha),
-    order_density: lerp(current.order_density, next.order_density, alpha),
+    liquidity_density_factor: lerp(current.liquidity_density_factor || 0, next.liquidity_density_factor || 0, alpha),
+    gamma_metabolism_factor: lerp(current.gamma_metabolism_factor || 0, next.gamma_metabolism_factor || 0, alpha),
+    manipulation_factor: lerp(current.manipulation_factor || 0, next.manipulation_factor || 0, alpha),
+    price_kinetic_factor: lerp(current.price_kinetic_factor || 0, next.price_kinetic_factor || 0, alpha),
+    health_score: lerp(current.health_score || 0, next.health_score || 0, alpha),
+    side_imbalance: lerp(current.side_imbalance || 0, next.side_imbalance || 0, alpha),
+    order_density: lerp(current.order_density || 0, next.order_density || 0, alpha),
     ask_flow: lerpArray(current.ask_flow, next.ask_flow, alpha),
     bid_flow: lerpArray(current.bid_flow, next.bid_flow, alpha),
   };
@@ -171,8 +171,8 @@ function buildSeries(frame, strikeMin, strikeMax) {
       askNorm,
       bidNorm,
       volatilityNorm,
-      pressureY: 620 - pressureNorm * 320 - frame.order_density * 36,
-      volatilityY: 600 - volatilityNorm * 260 - frame.manipulation_factor * 18,
+      pressureY: 620 - pressureNorm * 320 - (frame.order_density || 0) * 36,
+      volatilityY: 600 - volatilityNorm * 260 - (frame.manipulation_factor || 0) * 18,
       askY: 605 - askNorm * 190,
       bidY: 605 - bidNorm * 190,
       ask: entry.ask,
@@ -181,6 +181,29 @@ function buildSeries(frame, strikeMin, strikeMax) {
       volatility: entry.volatility,
     };
   });
+}
+
+function deriveFrameStats(series) {
+  const strongest = series.reduce((best, point) => (point.pressure > best.pressure ? point : best), series[0]);
+
+  const totalAsk = series.reduce((sum, point) => sum + point.ask, 0);
+  const totalBid = series.reduce((sum, point) => sum + point.bid, 0);
+  const totalWeight = Math.max(totalAsk + totalBid, 0.001);
+  const weightedStrike = series.reduce(
+    (sum, point) => sum + point.strike * (point.ask + point.bid),
+    0,
+  ) / totalWeight;
+
+  const strongestAsk = series.reduce((best, point) => (point.ask > best.ask ? point : best), series[0]);
+  const strongestBid = series.reduce((best, point) => (point.bid > best.bid ? point : best), series[0]);
+
+  return {
+    strongest,
+    strongestAsk,
+    strongestBid,
+    currentPrice: weightedStrike,
+    spread: Math.abs(strongestAsk.strike - strongestBid.strike),
+  };
 }
 
 function buildSmoothLine(points) {
@@ -196,6 +219,81 @@ function buildSmoothLine(points) {
     path += ` C ${controlX} ${prev.y}, ${controlX} ${point.y}, ${point.x} ${point.y}`;
   }
   return path;
+}
+
+function formatPercent(value) {
+  return `${Math.round(Number(value ?? 0) * 100)}%`;
+}
+
+function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
+  if (!frame || !previousFrame) {
+    return [];
+  }
+
+  const markers = [];
+  const addMarker = (id, label, detail, laneX, anchorY, tone, score) => {
+    markers.push({
+      id,
+      label,
+      detail,
+      laneX,
+      anchorY,
+      tone,
+      score,
+    });
+  };
+
+  const gammaDelta = Number(frame.gamma_metabolism_factor ?? 0) - Number(previousFrame.gamma_metabolism_factor ?? 0);
+  const liquidityDelta = Number(frame.liquidity_density_factor ?? 0) - Number(previousFrame.liquidity_density_factor ?? 0);
+  const manipulationDelta = Number(frame.manipulation_factor ?? 0) - Number(previousFrame.manipulation_factor ?? 0);
+
+  const strongestX = stats?.strongest?.x ?? 535;
+  const priceX = 110 + ((stats.currentPrice - strikeMin) / Math.max(strikeMax - strikeMin, 1)) * 850;
+
+  if (Number(frame.gamma_metabolism_factor ?? 0) >= 0.72 || gammaDelta >= 0.12) {
+    addMarker(
+      'gamma-spike',
+      'Gamma spike',
+      `Metabolism ${formatPercent(frame.gamma_metabolism_factor)}`,
+      strongestX,
+      Math.max((stats?.strongest?.pressureY ?? 220) - 22, 190),
+      'gamma',
+      Math.max(Number(frame.gamma_metabolism_factor ?? 0), gammaDelta + 0.5),
+    );
+  }
+
+  if (Number(frame.liquidity_density_factor ?? 0) <= 0.34 || liquidityDelta <= -0.12) {
+    addMarker(
+      'liquidity-drop',
+      'Liquidity drop',
+      `Coverage ${formatPercent(frame.liquidity_density_factor)}`,
+      priceX,
+      132,
+      'liquidity',
+      Math.max(1 - Number(frame.liquidity_density_factor ?? 0), Math.abs(liquidityDelta)),
+    );
+  }
+
+  if (Number(frame.manipulation_factor ?? 0) >= 0.62 || manipulationDelta >= 0.14) {
+    addMarker(
+      'manipulation-burst',
+      'Stress spike',
+      `Stress ${formatPercent(frame.manipulation_factor)}`,
+      strongestX + 28,
+      Math.max((stats?.strongest?.pressureY ?? 220) - 70, 156),
+      'manipulation',
+      Math.max(Number(frame.manipulation_factor ?? 0), manipulationDelta + 0.5),
+    );
+  }
+
+  return markers
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((marker, index) => ({
+      ...marker,
+      laneX: clamp(marker.laneX, 146, 924),
+      anchorY: clamp(marker.anchorY + index * 8, 128, 544),
+    }));
 }
 
 function buildArea(points, floorY) {
@@ -243,24 +341,86 @@ function MetricCard({ label, value, hint }) {
   );
 }
 
+function MiniTimeline({ frames, playhead, onJump }) {
+  const points = useMemo(() => {
+    if (!frames.length) {
+      return { healthPath: '', volatilityPath: '', currentX: 0 };
+    }
+
+    const health = frames.map((frame, index) => ({
+      x: 18 + (index / Math.max(frames.length - 1, 1)) * 304,
+      y: 68 - Number(frame.health_score ?? 0) * 42,
+    }));
+
+    const volatility = frames.map((frame, index) => ({
+      x: 18 + (index / Math.max(frames.length - 1, 1)) * 304,
+      y: 68 - Number(frame.manipulation_factor ?? 0) * 42,
+    }));
+
+    const currentX = 18 + (playhead / Math.max(frames.length - 1, 1)) * 304;
+
+    return {
+      healthPath: buildSmoothLine(health),
+      volatilityPath: buildSmoothLine(volatility),
+      currentX,
+    };
+  }, [frames, playhead]);
+
+  return (
+    <div className="mini-timeline">
+      <svg viewBox="0 0 340 92" className="mini-timeline-svg" role="img" aria-label="Health and volatility over time">
+        <rect x="8" y="10" width="324" height="64" rx="12" className="mini-frame" />
+        <path d={points.healthPath} className="mini-line mini-line-health" />
+        <path d={points.volatilityPath} className="mini-line mini-line-volatility" />
+        <line x1={points.currentX} y1="12" x2={points.currentX} y2="74" className="mini-cursor" />
+      </svg>
+      <input
+        className="mini-timeline-input"
+        type="range"
+        min={0}
+        max={Math.max(frames.length - 1, 0)}
+        step={0.001}
+        value={playhead}
+        onChange={(event) => onJump(Number(event.target.value))}
+      />
+      <div className="mini-legend">
+        <span><i className="mini-dot mini-dot-health" />Health</span>
+        <span><i className="mini-dot mini-dot-volatility" />Volatility</span>
+      </div>
+    </div>
+  );
+}
+
 function DataLandscape({
   frame,
+  previousFrame,
   strikeMin,
   strikeMax,
   focusedKey,
   demoBeat,
   onFocusKey,
+  pinnedInfo,
+  onPinInfo,
   activePoint,
   onHoverPoint,
   onLeavePoint,
+  followPrice,
 }) {
   const series = useMemo(() => buildSeries(frame, strikeMin, strikeMax), [frame, strikeMin, strikeMax]);
+  const stats = useMemo(() => deriveFrameStats(series), [series]);
   const xTicks = useMemo(() => buildAxisTicks(strikeMin, strikeMax), [strikeMin, strikeMax]);
   const yTicks = useMemo(() => buildYAxisTicks(), []);
   const pressureArea = useMemo(() => buildArea(series.map((entry) => ({ x: entry.x, y: entry.pressureY })), 620), [series]);
   const pressureLine = useMemo(() => buildSmoothLine(series.map((entry) => ({ x: entry.x, y: entry.pressureY }))), [series]);
   const volatilityLine = useMemo(() => buildSmoothLine(series.map((entry) => ({ x: entry.x, y: entry.volatilityY }))), [series]);
+  const eventMarkers = useMemo(
+    () => buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax),
+    [frame, previousFrame, stats, strikeMin, strikeMax],
+  );
   const effectiveFocus = focusedKey || demoBeat?.focus || 'pressure';
+  const priceX = 110 + ((stats.currentPrice - strikeMin) / Math.max(strikeMax - strikeMin, 1)) * 850;
+  const infoKey = pinnedInfo || effectiveFocus;
+  const info = EXPLAINERS[infoKey] ?? EXPLAINERS.pressure;
 
   return (
     <div className="viz-shell">
@@ -278,6 +438,16 @@ function DataLandscape({
 
         <rect width="1080" height="760" fill="url(#bg)" />
         <rect x="72" y="52" width="954" height="654" className="plot-frame" />
+
+        {eventMarkers.map((marker) => (
+          <g key={marker.id} transform={`translate(${marker.laneX}, ${marker.anchorY})`} className={`event-marker event-marker-${marker.tone}`}>
+            <line x1="0" y1="-30" x2="0" y2="0" className="event-stem" />
+            <circle cx="0" cy="0" r="5" className="event-anchor" />
+            <rect x="-68" y="-64" width="136" height="24" rx="12" className="event-pill" />
+            <text x="0" y="-48" textAnchor="middle" className="event-label">{marker.label}</text>
+            <text x="0" y="-30" textAnchor="middle" className="event-detail">{marker.detail}</text>
+          </g>
+        ))}
 
         {yTicks.map((tick) => (
           <g key={tick.id}>
@@ -303,6 +473,11 @@ function DataLandscape({
           <path d={pressureLine} className="pressure-line" />
         </g>
 
+        <g>
+          <line x1={priceX} y1="160" x2={priceX} y2="620" className={`price-line ${followPrice ? 'price-line-follow' : ''}`} />
+          <text x={priceX + 8} y="180" className="price-label">Mid {stats.currentPrice.toFixed(1)}</text>
+        </g>
+
         <g opacity={effectiveFocus === 'volatility' ? 1 : 0.88}>
           <path d={volatilityLine} className="volatility-line" />
         </g>
@@ -319,6 +494,7 @@ function DataLandscape({
                 onFocusKey('bid');
                 onHoverPoint(point);
               }}
+              onClick={() => onPinInfo('bid')}
               onFocus={() => {
                 onFocusKey('bid');
                 onHoverPoint(point);
@@ -341,6 +517,7 @@ function DataLandscape({
                 onFocusKey('ask');
                 onHoverPoint(point);
               }}
+              onClick={() => onPinInfo('ask')}
               onFocus={() => {
                 onFocusKey('ask');
                 onHoverPoint(point);
@@ -358,6 +535,13 @@ function DataLandscape({
           </g>
         ) : null}
 
+        <g>
+          <circle cx={stats.strongest.x} cy={stats.strongest.pressureY} r="9" className="strongest-ring" />
+          <text x={Math.min(stats.strongest.x + 12, 860)} y={stats.strongest.pressureY - 10} className="strongest-label">
+            Strongest lane
+          </text>
+        </g>
+
         <rect
           x="110"
           y="160"
@@ -365,21 +549,35 @@ function DataLandscape({
           height="460"
           className={`hotspot ${effectiveFocus === 'axes' ? 'hotspot-active' : ''}`}
           onMouseEnter={() => onFocusKey('axes')}
+          onClick={() => onPinInfo('axes')}
           onMouseLeave={onLeavePoint}
         />
         <path
           d={pressureArea}
           className={`hotspot ${effectiveFocus === 'pressure' ? 'hotspot-active' : ''}`}
           onMouseEnter={() => onFocusKey('pressure')}
+          onClick={() => onPinInfo('pressure')}
           onMouseLeave={onLeavePoint}
         />
         <path
           d={volatilityLine}
           className={`hotspot-line ${effectiveFocus === 'volatility' ? 'hotspot-line-active' : ''}`}
           onMouseEnter={() => onFocusKey('volatility')}
+          onClick={() => onPinInfo('volatility')}
           onMouseLeave={onLeavePoint}
         />
       </svg>
+      <div className="viz-help">Hover to inspect. Click a layer to pin what it means.</div>
+      {pinnedInfo ? (
+        <div className="info-card">
+          <div className="info-card-head">
+            <p className="panel-kicker">Pinned explanation</p>
+            <button type="button" className="info-close" onClick={() => onPinInfo('')}>Close</button>
+          </div>
+          <h3 className="info-title">{info.title}</h3>
+          <p className="info-copy">{info.body}</p>
+        </div>
+      ) : null}
       <Tooltip point={activePoint} />
     </div>
   );
@@ -392,7 +590,9 @@ function App() {
   const [speed, setSpeed] = useState(1);
   const [demoMode, setDemoMode] = useState(true);
   const [focusedKey, setFocusedKey] = useState('');
+  const [pinnedInfo, setPinnedInfo] = useState('');
   const [activePoint, setActivePoint] = useState(null);
+  const [followPrice, setFollowPrice] = useState(true);
 
   const frames = payload?.frames ?? [];
   const frameCount = frames.length;
@@ -472,194 +672,253 @@ function App() {
 
   const strikeMin = Number(payload.strike_min ?? 0);
   const strikeMax = Number(payload.strike_max ?? frame.ask_flow.length - 1);
-  const activeKey = focusedKey || (demoMode ? demoBeat.focus : 'pressure');
-  const explainer = EXPLAINERS[activeKey] ?? EXPLAINERS.pressure;
   const balance = frame.side_imbalance >= 0 ? 'Ask-led' : 'Bid-led';
+  const frameSeries = buildSeries(frame, strikeMin, strikeMax);
+  const frameStats = deriveFrameStats(frameSeries);
+  const previousIndex = Math.max(Math.floor(playhead) - 1, 0);
+  const previousFrame = frames[previousIndex] ?? frames[0];
+  const previousStats = deriveFrameStats(buildSeries(previousFrame, strikeMin, strikeMax));
+  const priceChange = frameStats.currentPrice - previousStats.currentPrice;
+  const events = buildEventMarkers(frame, previousFrame, frameStats, strikeMin, strikeMax);
 
   return (
     <main className="app-shell">
-      <section className="hero-copy">
-        <div className="hero-topline">
-          <p className="eyebrow">Readable Data Visualization</p>
-          <span className={`demo-pill ${demoMode ? 'demo-pill-live' : ''}`}>{demoMode ? 'Story mode' : 'Explore mode'}</span>
+      {/* Slim header bar */}
+      <header className="hero-bar">
+        <div className="hero-bar-left">
+          <h1 className="hero-bar-title">Market Pressure Map</h1>
+          <span className={`demo-pill ${demoMode ? 'demo-pill-live' : ''}`}>
+            {demoMode ? 'Story mode' : 'Explore mode'}
+          </span>
         </div>
-        <h1 className="hero-title">Pressure, liquidity, and volatility shown without the extra metaphor.</h1>
-        <p className="hero-text">
-          The blue shape is total pressure, the orange line is volatility, blue dots are bid liquidity,
-          and gold dots are ask liquidity. Hover a point to see exact values for that lane.
-        </p>
-      </section>
+        <p className="hero-bar-sub">Pressure · Liquidity · Volatility · Price</p>
+      </header>
 
       <section className="stage-panel">
-        <div className="stage-header">
-          <div>
-            <p className="panel-kicker">{demoMode ? 'Story step' : 'Current explanation'}</p>
-            <p className="stage-title">{demoMode ? demoBeat.title : explainer.title}</p>
+        <div className="stage-workspace">
+
+          {/* Full-width chart column */}
+          <div className="chart-column">
+            <div className="stage-header stage-header-inline">
+              <div>
+                <p className="panel-kicker">{demoMode ? 'Story step' : 'Current frame'}</p>
+                <p className="stage-title">{demoMode ? demoBeat.title : formatTimestamp(frame.timestamp)}</p>
+              </div>
+              <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
+            </div>
+
+            <div className="plot-legend plot-legend-inline">
+              <div className="plot-legend-item">
+                <span className="legend-swatch legend-swatch-pressure-line" />
+                Pressure ridge
+              </div>
+              <div className="plot-legend-item">
+                <span className="legend-swatch legend-swatch-volatility-line" />
+                Volatility
+              </div>
+              <div className="plot-legend-item">
+                <span className="legend-swatch legend-swatch-bid" />
+                Bid liquidity
+              </div>
+              <div className="plot-legend-item">
+                <span className="legend-swatch legend-swatch-ask" />
+                Ask liquidity
+              </div>
+            </div>
+
+            <DataLandscape
+              frame={frame}
+              previousFrame={previousFrame}
+              strikeMin={strikeMin}
+              strikeMax={strikeMax}
+              focusedKey={focusedKey}
+              demoBeat={demoMode ? demoBeat : null}
+              onFocusKey={setFocusedKey}
+              pinnedInfo={pinnedInfo}
+              onPinInfo={setPinnedInfo}
+              activePoint={activePoint}
+              onHoverPoint={setActivePoint}
+              onLeavePoint={() => {
+                setActivePoint(null);
+                setFocusedKey(demoMode ? demoBeat.focus : '');
+              }}
+              followPrice={followPrice}
+            />
           </div>
-          <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
+
+          <aside className="insight-rail" aria-label="Current frame insights">
+
+            {/* Card 1: Current frame + timestamp */}
+            <div className="rail-section rail-section-highlight">
+              <p className="panel-kicker">Current frame</p>
+              <h2 className="rail-title">{formatTimestamp(frame.timestamp)}</h2>
+              <div className="rail-mini-stats">
+                <div className="rail-stat">
+                  <p className="panel-kicker">Health</p>
+                  <p className="rail-stat-value">{frame.health_score.toFixed(2)}</p>
+                </div>
+                <div className="rail-stat">
+                  <p className="panel-kicker">Bias</p>
+                  <p className="rail-stat-value">{balance}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Metrics + Price */}
+            <div className="rail-section">
+              <p className="panel-kicker">Metrics</p>
+              <div className="metric-grid-rail" style={{marginTop:'0.45rem'}}>
+                <div className="metric-card">
+                  <p className="metric-label">Liquidity</p>
+                  <p className="metric-value">{formatPercent(frame.liquidity_density_factor)}</p>
+                </div>
+                <div className="metric-card">
+                  <p className="metric-label">Volatility</p>
+                  <p className="metric-value">{formatPercent(frame.manipulation_factor)}</p>
+                </div>
+              </div>
+              <div className="price-strip-rail">
+                <div className="price-box">
+                  <p className="panel-kicker">Price</p>
+                  <p className="price-value">{frameStats.currentPrice.toFixed(1)}</p>
+                </div>
+                <div className="price-box">
+                  <p className="panel-kicker">Change</p>
+                  <p className={`price-value ${priceChange >= 0 ? 'price-up' : 'price-down'}`}>{priceChange >= 0 ? '+' : ''}{priceChange.toFixed(1)}</p>
+                </div>
+                <div className="price-box">
+                  <p className="panel-kicker">Spread</p>
+                  <p className="price-value">{frameStats.spread.toFixed(1)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Strongest lane */}
+            <div className="rail-section">
+              <p className="panel-kicker">Strongest lane</p>
+              <h2 className="detail-title">Lane {frameStats.strongest.index + 1}</h2>
+              <p className="detail-copy">Strike {frameStats.strongest.strike}</p>
+              <p className="detail-copy" style={{marginTop:'0.35rem'}}>
+                Highest combined pressure. Marked on chart with a gold ring.
+              </p>
+            </div>
+
+            {/* Card 4: Events */}
+            <div className="rail-section">
+              <div className="panel-head">
+                <p className="panel-kicker">Event markers</p>
+                <span className="timeline-caption">alerts</span>
+              </div>
+              <div className="event-list event-list-rail">
+                {events.length ? events.map((event) => (
+                  <div key={event.id} className={`event-chip event-chip-${event.tone}`}>
+                    <p className="event-chip-label">{event.label}</p>
+                    <p className="event-chip-detail">{event.detail}</p>
+                  </div>
+                )) : (
+                  <div className="event-chip event-chip-muted">
+                    <p className="event-chip-label">No major events</p>
+                    <p className="event-chip-detail">Below alert thresholds.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </aside>
         </div>
 
-        <div className="plot-legend">
-          <div className="plot-legend-item">
-            <span className="legend-swatch legend-swatch-pressure-line" />
-            Pressure ridge
+        <div className="dock-panel" aria-label="Replay controls">
+          <div className="dock-primary">
+            <div className="panel-head">
+              <label className="timeline-label" htmlFor="timeline">Replay timeline</label>
+              <span className="timeline-caption">{formatTimestamp(frame.timestamp)}</span>
+            </div>
+            <MiniTimeline
+              frames={frames}
+              playhead={playhead}
+              onJump={(value) => {
+                setPlayhead(value);
+                setIsPlaying(false);
+                setDemoMode(false);
+                setFocusedKey('');
+                setPinnedInfo('');
+                setActivePoint(null);
+              }}
+            />
           </div>
-          <div className="plot-legend-item">
-            <span className="legend-swatch legend-swatch-volatility-line" />
-            Volatility
-          </div>
-          <div className="plot-legend-item">
-            <span className="legend-swatch legend-swatch-bid" />
-            Bid liquidity
-          </div>
-          <div className="plot-legend-item">
-            <span className="legend-swatch legend-swatch-ask" />
-            Ask liquidity
-          </div>
-        </div>
 
-        <DataLandscape
-          frame={frame}
-          strikeMin={strikeMin}
-          strikeMax={strikeMax}
-          focusedKey={focusedKey}
-          demoBeat={demoMode ? demoBeat : null}
-          onFocusKey={setFocusedKey}
-          activePoint={activePoint}
-          onHoverPoint={setActivePoint}
-          onLeavePoint={() => {
-            setActivePoint(null);
-            setFocusedKey(demoMode ? demoBeat.focus : '');
-          }}
-        />
-
-        <div className="story-overlay">
-          <p className="story-kicker">{demoMode ? 'Narration' : 'What this means'}</p>
-          <h2 className="story-title">{demoMode ? demoBeat.title : explainer.title}</h2>
-          <p className="story-body">{demoMode ? demoBeat.body : explainer.body}</p>
-        </div>
-      </section>
-
-      <section className="control-panel" aria-label="Visualization Controls">
-        <div className="metric-grid">
-          <MetricCard label="Health" value={frame.health_score.toFixed(2)} hint="overall condition" />
-          <MetricCard label="Order Density" value={`${Math.round(frame.order_density * 100)}%`} hint="lifts the pressure ridge" />
-          <MetricCard label="Liquidity" value={`${Math.round(frame.liquidity_density_factor * 100)}%`} hint="changes dot intensity" />
-          <MetricCard label="Market Bias" value={balance} hint="which side is stronger" />
-        </div>
-
-        <div className="panel-section">
-          <div className="panel-head">
-            <label className="timeline-label" htmlFor="timeline">Replay timeline</label>
-            <span className="timeline-caption">{formatTimestamp(frame.timestamp)}</span>
-          </div>
-          <input
-            id="timeline"
-            type="range"
-            min={0}
-            max={maxPlayhead}
-            step={0.001}
-            value={playhead}
-            onChange={(event) => {
-              setPlayhead(Number(event.target.value));
-              setIsPlaying(false);
-              setDemoMode(false);
-              setFocusedKey('');
-              setActivePoint(null);
-            }}
-          />
-        </div>
-
-        <div className="button-row">
-          <button
-            type="button"
-            className="action-button"
-            onClick={() => {
-              if (playhead >= maxPlayhead) {
+          <div className="dock-actions">
+            <button
+              type="button"
+              className="action-button"
+              onClick={() => {
+                if (playhead >= maxPlayhead) {
+                  setPlayhead(0);
+                }
+                setDemoMode(false);
+                setFocusedKey('');
+                setPinnedInfo('');
+                setIsPlaying((value) => !value);
+              }}
+            >
+              {isPlaying && !demoMode ? 'Pause' : 'Play'}
+            </button>
+            <button
+              type="button"
+              className="action-button action-button-emphasis"
+              onClick={() => {
                 setPlayhead(0);
-              }
-              setDemoMode(false);
-              setFocusedKey('');
-              setIsPlaying((value) => !value);
-            }}
-          >
-            {isPlaying && !demoMode ? 'Pause' : 'Play'}
-          </button>
-          <button
-            type="button"
-            className="action-button action-button-emphasis"
-            onClick={() => {
-              setPlayhead(0);
-              setSpeed(1);
-              setDemoMode(true);
-              setFocusedKey(DEMO_BEATS[0].focus);
-              setActivePoint(null);
-              setIsPlaying(true);
-            }}
-          >
-            Start story mode
-          </button>
-          <button
-            type="button"
-            className="action-button action-button-muted"
-            onClick={() => {
-              setPlayhead(0);
-              setIsPlaying(false);
-              setDemoMode(false);
-              setFocusedKey('');
-              setActivePoint(null);
-            }}
-          >
-            Reset
-          </button>
-          <label className="speed-control" htmlFor="speed">
-            Speed
-            <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-              <option value={0.5}>0.5x</option>
-              <option value={1}>1x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="panel-section">
-          <p className="panel-kicker">Explanation</p>
-          <h2 className="detail-title">{explainer.title}</h2>
-          <p className="detail-copy">{explainer.body}</p>
-        </div>
-
-        <div className="legend-grid">
-          <button type="button" className={`legend-item ${activeKey === 'pressure' ? 'legend-item-active' : ''}`} onMouseEnter={() => setFocusedKey('pressure')}>
-            <span className="legend-swatch legend-swatch-pressure" />
-            Pressure ridge
-          </button>
-          <button type="button" className={`legend-item ${activeKey === 'volatility' ? 'legend-item-active' : ''}`} onMouseEnter={() => setFocusedKey('volatility')}>
-            <span className="legend-swatch legend-swatch-volatility" />
-            Volatility line
-          </button>
-          <button type="button" className={`legend-item ${activeKey === 'bid' ? 'legend-item-active' : ''}`} onMouseEnter={() => setFocusedKey('bid')}>
-            <span className="legend-swatch legend-swatch-bid" />
-            Bid liquidity
-          </button>
-          <button type="button" className={`legend-item ${activeKey === 'ask' ? 'legend-item-active' : ''}`} onMouseEnter={() => setFocusedKey('ask')}>
-            <span className="legend-swatch legend-swatch-ask" />
-            Ask liquidity
-          </button>
-          <button type="button" className={`legend-item ${activeKey === 'axes' ? 'legend-item-active' : ''}`} onMouseEnter={() => setFocusedKey('axes')}>
-            <span className="legend-swatch legend-swatch-axes" />
-            Axes
-          </button>
-        </div>
-
-        <div className="summary-grid">
-          <div className="summary-card">
-            <p className="summary-label">Strike range</p>
-            <p className="summary-value">{strikeMin} to {strikeMax}</p>
+                setSpeed(1);
+                setDemoMode(true);
+                setFocusedKey(DEMO_BEATS[0].focus);
+                setPinnedInfo('');
+                setActivePoint(null);
+                setIsPlaying(true);
+              }}
+            >
+              Story mode
+            </button>
+            <button
+              type="button"
+              className="action-button action-button-muted"
+              onClick={() => {
+                setPlayhead(0);
+                setIsPlaying(false);
+                setDemoMode(false);
+                setFocusedKey('');
+                setPinnedInfo('');
+                setActivePoint(null);
+              }}
+            >
+              Reset
+            </button>
+            <label className="speed-control" htmlFor="speed">
+              Speed
+              <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
+                <option value={0.5}>0.5x</option>
+                <option value={1}>1x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2}>2x</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
+              onClick={() => setFollowPrice((value) => !value)}
+            >
+              {followPrice ? 'Follow price' : 'Unlock price'}
+            </button>
           </div>
-          <div className="summary-card">
-            <p className="summary-label">Volatility</p>
-            <p className="summary-value">{Math.round(frame.manipulation_factor * 100)}%</p>
+
+          <div className="summary-grid summary-grid-dock">
+            <div className="summary-card">
+              <p className="summary-label">Strike range</p>
+              <p className="summary-value">{strikeMin} to {strikeMax}</p>
+            </div>
+            <div className="summary-card">
+              <p className="summary-label">Order density</p>
+              <p className="summary-value">{formatPercent(frame.order_density)}</p>
+            </div>
           </div>
         </div>
       </section>
