@@ -1,23 +1,26 @@
 # Orderbook Organism
 
-Orderbook Organism is a lightweight web prototype that turns order-book activity into a replayable pressure landscape. It is designed to make dense market microstructure easier to read: where activity is crowding, which side is supplying liquidity, and when the market surface starts to look stressed.
+**Live demo:** https://justfady.github.io/orderbook-organism/
 
-## Live Site
+Orderbook Organism is a React/Vite prototype that turns order-book activity into a replayable pressure landscape. It is built to make complicated market microstructure easier to explain in a presentation: where pressure is clustering, where liquidity is thinning, and when the book starts to look stressed.
 
+## What To Open
+
+Use this URL for the deployed project:
+
+```text
 https://justfady.github.io/orderbook-organism/
+```
 
-## What You Are Looking At
+Use this URL when running locally:
 
-The app replays market state across strike lanes and translates raw flow into a few readable signals:
+```text
+http://127.0.0.1:5173/orderbook-organism/
+```
 
-- **Pressure ridge:** the filled blue shape combines ask and bid flow. Taller peaks mean a strike lane is carrying more activity than nearby lanes.
-- **Bid liquidity:** blue dots show bid-side support.
-- **Ask liquidity:** gold dots show ask-side concentration.
-- **Stress signal:** the orange line rises when bid and ask flow split apart.
-- **Weighted price:** the vertical dashed line tracks the center of the current frame.
-- **Frame diagnosis:** the top card summarizes the current moment in plain English.
+Do not use `/cpsc481_project/`. That was the old folder/project name, not the app route.
 
-Use **Guided tour** for a presentation-friendly walkthrough, or **Explore replay** to scrub the replay and inspect individual lanes. The replay source selector includes the original sample plus recovered real LOB slices from `09:22`, `09:23`, `09:24`, and `09:26`.
+If `http://127.0.0.1:5173/...` opens a different site, another dev server is already using port `5173`. Stop that server, then start this project again.
 
 ## Run Locally
 
@@ -27,85 +30,55 @@ npm install
 npm run dev
 ```
 
-The app uses the Vite base path `/orderbook-organism/`, so the local URL usually looks like:
+The app is intentionally configured to use port `5173`. If that port is busy, `npm run dev` will fail instead of quietly switching ports.
 
-```text
-http://127.0.0.1:5173/orderbook-organism/
-```
-
-If port `5173` is busy, Vite will print the correct replacement URL.
-
-## Project Layout
-
-```text
-.
-|-- webapp/                         # React/Vite app for the live prototype
-|   |-- public/data/replay_frames.json
-|   |-- public/data/replay_0922.json
-|   |-- public/data/replay_0923.json
-|   |-- public/data/replay_0924.json
-|   |-- public/data/replay_0926.json
-|   `-- src/
-|-- analysis/replay/replay_frames.json
-|-- analysis/replay/replay_*.json
-|-- scripts/                        # Parsing and replay export utilities
-|-- app/dashboard.py                # Streamlit exploratory dashboard
-|-- docs/schema_contract.md         # Data contract notes
-|-- parsed_scaled/                  # Source market data
-`-- DATA_DICTIONARY.md
-```
-
-## Data Flow
-
-1. Source market data lives in `parsed_scaled/`.
-2. Python utilities in `scripts/` parse and shape the data.
-3. `analysis/replay/replay_frames.json` stores the generated replay payload.
-4. `webapp/public/data/*.json` files are the copies consumed by the React app.
-
-When replay data changes, refresh the matching web copy:
-
-```bash
-cp analysis/replay/replay_frames.json webapp/public/data/replay_frames.json
-```
-
-Raw `.csv.gz` LOB blobs can be parsed with:
-
-```bash
-python3 scripts/parse_lob_blob.py --input loaded_lob_20250414__20250414_0922.csv.gz --outdir data/parsed_parts/loaded_lob_20250414__20250414_0922.csv
-```
-
-Then export a replay payload:
-
-```bash
-.venv/bin/python scripts/export_replay_frames.py \
-  --input data/parsed_parts/loaded_lob_20250414__20250414_0922.csv/levels.csv \
-  --output analysis/replay/replay_0922.json \
-  --webapp-output webapp/public/data/replay_0922.json
-```
-
-## Useful Commands
+For a temporary fallback port:
 
 ```bash
 cd webapp
-npm run dev      # Start local dev server
-npm run build    # Build production assets
-npm run preview  # Preview production build
+npm run dev:auto
 ```
 
-Optional Streamlit dashboard:
+Then open the URL Vite prints, using the `/orderbook-organism/` path.
+
+## How To Read The App
+
+- **Pressure ridge:** the blue filled shape shows where combined bid and ask activity is concentrated.
+- **Bid liquidity:** blue dots show bid-side support.
+- **Ask liquidity:** gold dots show ask-side concentration.
+- **Stress line:** the orange line rises when the two sides of the book split apart.
+- **Guided tour:** walks through the visualization in a presentation-friendly order.
+- **Event bookmarks:** jump to moments like liquidity drops, stress spikes, and pressure clusters.
+
+## Project Structure
+
+```text
+webapp/              React/Vite app
+webapp/public/data/  Replay JSON files used by the app
+analysis/replay/     Generated replay payloads
+scripts/             Data parsing and replay export scripts
+app/                 Optional Streamlit exploration dashboard
+docs/                Data contract notes
+```
+
+## Data Notes
+
+The app currently includes the original replay plus recovered LOB slices for `09:22`, `09:23`, `09:24`, and `09:26`.
+
+To regenerate a replay from a parsed `levels.csv` file:
 
 ```bash
-pip install streamlit plotly pandas numpy
-streamlit run app/dashboard.py
+.venv/bin/python scripts/export_replay_frames.py \
+  --input data/parsed_parts/example/levels.csv \
+  --output analysis/replay/replay_example.json \
+  --webapp-output webapp/public/data/replay_example.json
 ```
 
 ## Deployment
 
-The live site is served from the `gh-pages` branch. Before deploying, build the web app:
+The live site is served from the `gh-pages` branch. Build the app, then publish `webapp/dist/` to `gh-pages`.
 
 ```bash
 cd webapp
 npm run build
 ```
-
-Then publish the contents of `webapp/dist/` to `gh-pages`.
