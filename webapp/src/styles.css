@@ -213,16 +213,24 @@ body {
   gap: 0.85rem;
 }
 
-/* Orientation */
-.orientation-panel {
+.replay-layout {
   display: grid;
-  grid-template-columns: minmax(270px, 0.85fr) minmax(420px, 1.6fr) minmax(260px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.replay-main {
+  min-width: 0;
+}
+
+.replay-context-panel {
+  display: grid;
   gap: 0.75rem;
-  align-items: stretch;
+  min-width: 0;
 }
 
 .diagnosis-card,
-.reading-card,
 .story-note {
   min-width: 0;
   padding: 0.9rem;
@@ -249,8 +257,7 @@ body {
 .diagnosis-card-steady::before { background: var(--green); }
 
 .diagnosis-title,
-.story-note-title,
-.reading-title {
+.story-note-title {
   margin: 0.25rem 0 0;
   font-family: 'Sora', sans-serif;
   font-weight: 600;
@@ -262,37 +269,13 @@ body {
 }
 
 .diagnosis-copy,
-.story-note-copy,
-.reading-copy {
+.story-note-copy {
   margin: 0.35rem 0 0;
   color: var(--muted);
   line-height: 1.45;
   font-size: 0.82rem;
 }
 
-.reading-guide-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-}
-
-.reading-card {
-  padding: 0.8rem;
-}
-
-.reading-label {
-  width: fit-content;
-  margin: 0;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(123, 200, 234, 0.08);
-  border: 1px solid rgba(123, 200, 234, 0.14);
-  color: #bfe5f4;
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-
-.reading-title,
 .story-note-title {
   font-size: 0.88rem;
 }
@@ -302,6 +285,52 @@ body {
     radial-gradient(circle at top right, rgba(239, 195, 106, 0.1), transparent 50%),
     rgba(255, 255, 255, 0.04);
   border-color: rgba(239, 195, 106, 0.13);
+}
+
+.quick-guide-panel {
+  padding: 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.quick-guide-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.quick-guide-item {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.quick-guide-label {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(123, 200, 234, 0.08);
+  border: 1px solid rgba(123, 200, 234, 0.14);
+  color: #bfe5f4;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.quick-guide-title {
+  margin: 0;
+  font-family: 'Sora', sans-serif;
+  font-size: 0.84rem;
+}
+
+.quick-guide-copy {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  line-height: 1.4;
+  font-size: 0.78rem;
 }
 
 /* Chart column */
@@ -360,7 +389,7 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 1080 / 650;
+  aspect-ratio: 1080 / 760;
   border-radius: 14px;
   overflow: hidden;
 }
@@ -668,6 +697,15 @@ body {
   margin-top: 0.75rem;
 }
 
+.bookmark-panel-compact .panel-head {
+  align-items: flex-start;
+}
+
+.bookmark-panel-compact .bookmark-grid {
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+
 .bookmark-card {
   display: grid;
   gap: 0.25rem;
@@ -679,6 +717,11 @@ body {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   cursor: pointer;
+}
+
+.bookmark-panel-compact .bookmark-card {
+  min-height: 0;
+  padding: 0.65rem 0.75rem;
 }
 
 .bookmark-card-active,
@@ -926,11 +969,18 @@ input[type='range'] {
 
 /* Responsive */
 @media (max-width: 1380px) {
-  .orientation-panel {
+  .replay-layout {
     grid-template-columns: 1fr;
   }
-  .reading-guide-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .replay-context-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .replay-context-panel .quick-guide-panel,
+  .replay-context-panel .bookmark-panel {
+    grid-column: 1 / -1;
+  }
+  .bookmark-panel-compact .bookmark-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .bookmark-grid,
   .tour-grid,
@@ -962,8 +1012,16 @@ input[type='range'] {
   .insight-rail {
     grid-template-columns: 1fr;
   }
-  .reading-guide-grid {
+  .replay-context-panel,
+  .bookmark-panel-compact .bookmark-grid {
     grid-template-columns: 1fr;
+  }
+  .replay-layout {
+    gap: 0.7rem;
+  }
+  .quick-guide-item {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
   }
   .bookmark-grid,
   .tour-grid,

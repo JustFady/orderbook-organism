@@ -439,13 +439,14 @@ function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
     );
   }
 
-  return markers
+  const visibleMarkers = markers
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((marker, index) => ({
+    .slice(0, 3);
+
+  return visibleMarkers.map((marker, index) => ({
       ...marker,
-      laneX: clamp(marker.laneX, 146, 924),
-      anchorY: clamp(marker.anchorY + index * 8, 128, 544),
+      laneX: clamp(marker.laneX + (index - (visibleMarkers.length - 1) / 2) * 92, 162, 908),
+      anchorY: clamp(marker.anchorY + index * 24, 128, 544),
     }));
 }
 
@@ -553,23 +554,13 @@ function Tooltip({ point }) {
   );
 }
 
-function ReadingGuide({ demoMode, demoBeat, diagnosis }) {
+function ReplayContextPanel({ demoMode, demoBeat, diagnosis, bookmarks, activeIndex, onJump }) {
   return (
-    <section className="orientation-panel" aria-label="How to read this market frame">
+    <aside className="replay-context-panel" aria-label="Replay context">
       <div className={`diagnosis-card diagnosis-card-${diagnosis.tone}`}>
         <p className="panel-kicker">Frame diagnosis</p>
         <h2 className="diagnosis-title">{diagnosis.title}</h2>
         <p className="diagnosis-copy">{diagnosis.body}</p>
-      </div>
-
-      <div className="reading-guide-grid">
-        {READING_GUIDE.map((item) => (
-          <article className="reading-card" key={item.label}>
-            <p className="reading-label">{item.label}</p>
-            <h3 className="reading-title">{item.title}</h3>
-            <p className="reading-copy">{item.body}</p>
-          </article>
-        ))}
       </div>
 
       <div className="story-note">
@@ -581,7 +572,24 @@ function ReadingGuide({ demoMode, demoBeat, diagnosis }) {
             : 'Scrub the replay and hover the chart to inspect individual lanes. The summary cards update with each frame.'}
         </p>
       </div>
-    </section>
+
+      <section className="quick-guide-panel" aria-label="How to read the frame">
+        <p className="panel-kicker">How to read it</p>
+        <div className="quick-guide-list">
+          {READING_GUIDE.map((item) => (
+            <article className="quick-guide-item" key={item.label}>
+              <span className="quick-guide-label">{item.label}</span>
+              <div>
+                <h3 className="quick-guide-title">{item.title}</h3>
+                <p className="quick-guide-copy">{item.body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <EventBookmarks bookmarks={bookmarks} activeIndex={activeIndex} onJump={onJump} compact />
+    </aside>
   );
 }
 
@@ -668,13 +676,13 @@ function GlossaryPage() {
   );
 }
 
-function EventBookmarks({ bookmarks, activeIndex, onJump }) {
+function EventBookmarks({ bookmarks, activeIndex, onJump, compact = false }) {
   return (
-    <section className="bookmark-panel" aria-label="Event bookmarks">
+    <section className={`bookmark-panel ${compact ? 'bookmark-panel-compact' : ''}`} aria-label="Event bookmarks">
       <div className="panel-head">
         <div>
           <p className="panel-kicker">Event bookmarks</p>
-          <h2 className="bookmark-title">Jump to useful demo moments</h2>
+          <h2 className="bookmark-title">{compact ? 'Demo moments' : 'Jump to useful demo moments'}</h2>
         </div>
         <span className="timeline-caption">{bookmarks.length} bookmarks</span>
       </div>
@@ -1098,55 +1106,64 @@ function App() {
         {activePage === 'replay' ? (
         <>
         <div className="stage-workspace">
-          <ReadingGuide demoMode={demoMode} demoBeat={demoBeat} diagnosis={diagnosis} />
-          <EventBookmarks bookmarks={eventBookmarks} activeIndex={playhead} onJump={jumpToFrame} />
+          <div className="replay-layout">
+            <div className="replay-main">
+              <div className="chart-column">
+                <div className="stage-header stage-header-inline">
+                  <div>
+                    <p className="panel-kicker">{demoMode ? 'Guided step' : 'Current frame'}</p>
+                    <p className="stage-title">{demoMode ? demoBeat.title : formatTimestamp(frame.timestamp)}</p>
+                  </div>
+                  <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
+                </div>
 
-          {/* Full-width chart column */}
-          <div className="chart-column">
-            <div className="stage-header stage-header-inline">
-              <div>
-                <p className="panel-kicker">{demoMode ? 'Guided step' : 'Current frame'}</p>
-                <p className="stage-title">{demoMode ? demoBeat.title : formatTimestamp(frame.timestamp)}</p>
+                <div className="plot-legend plot-legend-inline">
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-pressure-line" />
+                    Pressure ridge
+                  </div>
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-volatility-line" />
+                    Stress line
+                  </div>
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-bid" />
+                    Bid liquidity
+                  </div>
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-ask" />
+                    Ask liquidity
+                  </div>
+                </div>
+
+                <DataLandscape
+                  frame={frame}
+                  previousFrame={previousFrame}
+                  strikeMin={strikeMin}
+                  strikeMax={strikeMax}
+                  focusedKey={focusedKey}
+                  demoBeat={demoMode ? demoBeat : null}
+                  onFocusKey={setFocusedKey}
+                  pinnedInfo={pinnedInfo}
+                  onPinInfo={setPinnedInfo}
+                  activePoint={activePoint}
+                  onHoverPoint={setActivePoint}
+                  onLeavePoint={() => {
+                    setActivePoint(null);
+                    setFocusedKey(demoMode ? demoBeat.focus : '');
+                  }}
+                  followPrice={followPrice}
+                />
               </div>
-              <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
             </div>
 
-            <div className="plot-legend plot-legend-inline">
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-pressure-line" />
-                Pressure ridge
-              </div>
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-volatility-line" />
-                Stress line
-              </div>
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-bid" />
-                Bid liquidity
-              </div>
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-ask" />
-                Ask liquidity
-              </div>
-            </div>
-
-            <DataLandscape
-              frame={frame}
-              previousFrame={previousFrame}
-              strikeMin={strikeMin}
-              strikeMax={strikeMax}
-              focusedKey={focusedKey}
-              demoBeat={demoMode ? demoBeat : null}
-              onFocusKey={setFocusedKey}
-              pinnedInfo={pinnedInfo}
-              onPinInfo={setPinnedInfo}
-              activePoint={activePoint}
-              onHoverPoint={setActivePoint}
-              onLeavePoint={() => {
-                setActivePoint(null);
-                setFocusedKey(demoMode ? demoBeat.focus : '');
-              }}
-              followPrice={followPrice}
+            <ReplayContextPanel
+              demoMode={demoMode}
+              demoBeat={demoBeat}
+              diagnosis={diagnosis}
+              bookmarks={eventBookmarks}
+              activeIndex={playhead}
+              onJump={jumpToFrame}
             />
           </div>
 
