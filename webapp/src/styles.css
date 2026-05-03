@@ -284,16 +284,13 @@ body {
   margin-top: 0.6rem;
 }
 
-.context-tour-button {
-  width: 100%;
-  min-height: 2.7rem;
-  padding: 0.55rem 0.9rem;
-  border-radius: 999px;
-  border: 1px solid rgba(123, 200, 234, 0.22);
-  background: rgba(123, 200, 234, 0.08);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
+.context-controls {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .quick-guide-label {
@@ -387,7 +384,7 @@ body {
 .event-halo { fill: currentColor; opacity: 0.2; }
 .event-pill { fill: rgba(8,14,24,0.94); stroke: currentColor; stroke-opacity: 0.5; }
 .event-label { fill: rgba(236,244,248,0.98); font-size: 12px; font-weight: 700; }
-.event-detail { fill: rgba(236,244,248,0.78); font-size: 11px; }
+.event-detail { fill: rgba(236,244,248,0.82); font-size: 10px; }
 .event-marker-gamma { color: #f2d390; }
 .event-marker-liquidity { color: #7bc8ea; }
 .event-marker-manipulation { color: #f28c54; }
@@ -777,10 +774,7 @@ body {
 
 /* Dock panel */
 .dock-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(520px, 0.42fr);
-  gap: 0.75rem;
-  align-items: stretch;
+  display: block;
   padding: 0.9rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -788,19 +782,12 @@ body {
 }
 
 .dock-primary,
-.dock-side,
 .summary-grid-dock {
   padding: 0.75rem;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   min-width: 0;
-}
-
-.dock-side {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(185px, 0.72fr);
-  gap: 0.75rem;
 }
 
 .dock-actions {
@@ -813,6 +800,7 @@ body {
 
 .summary-grid-dock {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 0.5rem;
   align-content: start;
   padding: 0;
@@ -950,12 +938,6 @@ input[type='range'] {
   .insight-rail {
     grid-template-columns: 1fr 1fr;
   }
-  .dock-panel {
-    grid-template-columns: 1fr;
-  }
-  .dock-side {
-    grid-template-columns: 1fr 1fr;
-  }
   .dock-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -996,8 +978,6 @@ input[type='range'] {
   .page-nav-button {
     flex: 1;
   }
-  .dock-panel,
-  .dock-side,
   .dock-actions {
     grid-template-columns: 1fr;
   }

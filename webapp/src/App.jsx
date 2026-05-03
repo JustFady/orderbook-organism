@@ -524,7 +524,27 @@ function Tooltip({ point }) {
   );
 }
 
-function ReplayContextPanel({ diagnosis, events, onOpenTour }) {
+function ReplayContextPanel({
+  diagnosis,
+  events,
+  playhead,
+  maxPlayhead,
+  isPlaying,
+  demoMode,
+  setPlayhead,
+  setDemoMode,
+  setFocusedKey,
+  setPinnedInfo,
+  setActivePoint,
+  setIsPlaying,
+  setSpeed,
+  speed,
+  followPrice,
+  setFollowPrice,
+  strikeMin,
+  strikeMax,
+  frame,
+}) {
   const primaryEvent = events[0];
 
   return (
@@ -553,9 +573,81 @@ function ReplayContextPanel({ diagnosis, events, onOpenTour }) {
         )}
       </section>
 
-      <button type="button" className="context-tour-button" onClick={onOpenTour}>
-        View guide and bookmarks
-      </button>
+      <section className="context-controls" aria-label="Replay controls and summary">
+        <div className="dock-actions">
+          <button
+            type="button"
+            className="action-button"
+            onClick={() => {
+              if (playhead >= maxPlayhead) {
+                setPlayhead(0);
+              }
+              setDemoMode(false);
+              setFocusedKey('');
+              setPinnedInfo('');
+              setIsPlaying((value) => !value);
+            }}
+          >
+            {isPlaying && !demoMode ? 'Pause' : 'Play'}
+          </button>
+          <button
+            type="button"
+            className="action-button action-button-emphasis"
+            onClick={() => {
+              setPlayhead(0);
+              setSpeed(1);
+              setDemoMode(true);
+              setFocusedKey(DEMO_BEATS[0].focus);
+              setPinnedInfo('');
+              setActivePoint(null);
+              setIsPlaying(true);
+            }}
+          >
+            Guided tour
+          </button>
+          <button
+            type="button"
+            className="action-button action-button-muted"
+            onClick={() => {
+              setPlayhead(0);
+              setIsPlaying(false);
+              setDemoMode(false);
+              setFocusedKey('');
+              setPinnedInfo('');
+              setActivePoint(null);
+            }}
+          >
+            Reset
+          </button>
+          <label className="speed-control" htmlFor="speed">
+            <span>Speed</span>
+            <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={1.5}>1.5x</option>
+              <option value={2}>2x</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
+            onClick={() => setFollowPrice((value) => !value)}
+          >
+            {followPrice ? 'Follow price' : 'Unlock price'}
+          </button>
+        </div>
+
+        <div className="summary-grid summary-grid-dock">
+          <div className="summary-card">
+            <p className="summary-label">Strike range</p>
+            <p className="summary-value">{strikeMin} to {strikeMax}</p>
+          </div>
+          <div className="summary-card">
+            <p className="summary-label">Visible order coverage</p>
+            <p className="summary-value">{formatPercent(frame.order_density)}</p>
+          </div>
+        </div>
+      </section>
     </aside>
   );
 }
@@ -790,9 +882,9 @@ function DataLandscape({
             <line x1="0" y1="-40" x2="0" y2="4" className="event-stem" />
             <circle cx="0" cy="0" r="9" className="event-halo" />
             <circle cx="0" cy="0" r="5" className="event-anchor" />
-            <rect x="-82" y="-78" width="164" height="34" rx="12" className="event-pill" />
-            <text x="0" y="-58" textAnchor="middle" className="event-label">{marker.label}</text>
-            <text x="0" y="-43" textAnchor="middle" className="event-detail">{marker.detail}</text>
+            <rect x="-104" y="-82" width="208" height="42" rx="14" className="event-pill" />
+            <text x="0" y="-63" textAnchor="middle" className="event-label">{marker.label}</text>
+            <text x="0" y="-49" textAnchor="middle" className="event-detail">{marker.detail}</text>
           </g>
         ))}
 
@@ -1142,7 +1234,23 @@ function App() {
             <ReplayContextPanel
               diagnosis={diagnosis}
               events={events}
-              onOpenTour={() => setActivePage('tour')}
+              playhead={playhead}
+              maxPlayhead={maxPlayhead}
+              isPlaying={isPlaying}
+              demoMode={demoMode}
+              setPlayhead={setPlayhead}
+              setDemoMode={setDemoMode}
+              setFocusedKey={setFocusedKey}
+              setPinnedInfo={setPinnedInfo}
+              setActivePoint={setActivePoint}
+              setIsPlaying={setIsPlaying}
+              setSpeed={setSpeed}
+              speed={speed}
+              followPrice={followPrice}
+              setFollowPrice={setFollowPrice}
+              strikeMin={strikeMin}
+              strikeMax={strikeMax}
+              frame={frame}
             />
           </div>
 
@@ -1210,7 +1318,7 @@ function App() {
           </aside>
         </div>
 
-        <div className="dock-panel" aria-label="Replay controls">
+        <div className="dock-panel" aria-label="Replay timeline">
           <div className="dock-primary">
             <div className="panel-head">
               <label className="timeline-label" htmlFor="timeline">Replay timeline</label>
@@ -1228,82 +1336,6 @@ function App() {
                 setActivePoint(null);
               }}
             />
-          </div>
-
-          <div className="dock-side">
-            <div className="dock-actions">
-              <button
-                type="button"
-                className="action-button"
-                onClick={() => {
-                  if (playhead >= maxPlayhead) {
-                    setPlayhead(0);
-                  }
-                  setDemoMode(false);
-                  setFocusedKey('');
-                  setPinnedInfo('');
-                  setIsPlaying((value) => !value);
-                }}
-              >
-                {isPlaying && !demoMode ? 'Pause' : 'Play'}
-              </button>
-              <button
-                type="button"
-                className="action-button action-button-emphasis"
-                onClick={() => {
-                  setPlayhead(0);
-                  setSpeed(1);
-                  setDemoMode(true);
-                  setFocusedKey(DEMO_BEATS[0].focus);
-                  setPinnedInfo('');
-                  setActivePoint(null);
-                  setIsPlaying(true);
-                }}
-              >
-                Guided tour
-              </button>
-              <button
-                type="button"
-                className="action-button action-button-muted"
-                onClick={() => {
-                  setPlayhead(0);
-                  setIsPlaying(false);
-                  setDemoMode(false);
-                  setFocusedKey('');
-                  setPinnedInfo('');
-                  setActivePoint(null);
-                }}
-              >
-                Reset
-              </button>
-              <label className="speed-control" htmlFor="speed">
-                <span>Speed</span>
-                <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-                  <option value={0.5}>0.5x</option>
-                  <option value={1}>1x</option>
-                  <option value={1.5}>1.5x</option>
-                  <option value={2}>2x</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
-                onClick={() => setFollowPrice((value) => !value)}
-              >
-                {followPrice ? 'Follow price' : 'Unlock price'}
-              </button>
-            </div>
-
-            <div className="summary-grid summary-grid-dock">
-              <div className="summary-card">
-                <p className="summary-label">Strike range</p>
-                <p className="summary-value">{strikeMin} to {strikeMax}</p>
-              </div>
-              <div className="summary-card">
-                <p className="summary-label">Visible order coverage</p>
-                <p className="summary-value">{formatPercent(frame.order_density)}</p>
-              </div>
-            </div>
           </div>
         </div>
         </>
