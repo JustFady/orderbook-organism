@@ -30,6 +30,24 @@ const DEMO_BEATS = [
   { start: 0.7, end: 1, title: 'Stress and direction', focus: 'volatility', body: 'The orange line tracks instability while the summary cards show whether the frame leans bid-led or ask-led.' },
 ];
 
+const READING_GUIDE = [
+  {
+    label: 'Pressure',
+    title: 'Where the market crowds',
+    body: 'The filled ridge combines ask and bid flow. Tall peaks mean one strike lane is carrying more activity than its neighbors.',
+  },
+  {
+    label: 'Liquidity',
+    title: 'Who is supporting the lane',
+    body: 'Blue dots are bid support. Gold dots are ask concentration. Bigger dots mean stronger visible liquidity on that side.',
+  },
+  {
+    label: 'Stress',
+    title: 'When the surface gets unstable',
+    body: 'The orange line rises when bid and ask flow split apart. That is the warning signal for rougher behavior.',
+  },
+];
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -79,7 +97,7 @@ function useReplayData() {
 
     async function load() {
       try {
-        const response = await fetch('/data/replay_frames.json', { cache: 'no-store' });
+        const response = await fetch('data/replay_frames.json', { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Failed to load replay data: ${response.status}`);
         }
@@ -225,6 +243,48 @@ function formatPercent(value) {
   return `${Math.round(Number(value ?? 0) * 100)}%`;
 }
 
+function formatSigned(value) {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
+}
+
+function buildFrameDiagnosis(frame, stats, priceChange) {
+  const health = Number(frame.health_score ?? 0);
+  const liquidity = Number(frame.liquidity_density_factor ?? 0);
+  const stress = Number(frame.manipulation_factor ?? 0);
+  const density = Number(frame.order_density ?? 0);
+  const direction = frame.side_imbalance >= 0 ? 'ask-side' : 'bid-side';
+
+  if (stress >= 0.62 && liquidity <= 0.2) {
+    return {
+      title: 'Thin and jumpy',
+      body: `Liquidity is light while stress is elevated, so the strongest lane near ${stats.strongest.strike} deserves attention.`,
+      tone: 'warning',
+    };
+  }
+
+  if (health >= 0.68 && stress < 0.4) {
+    return {
+      title: 'Orderly pressure',
+      body: `The surface is relatively healthy. Pressure leans ${direction}, with the main cluster around strike ${stats.strongest.strike}.`,
+      tone: 'steady',
+    };
+  }
+
+  if (Math.abs(priceChange) >= 0.3 || density >= 0.35) {
+    return {
+      title: 'Pressure is moving',
+      body: `The weighted price shifted ${formatSigned(priceChange)} while visible order density is ${formatPercent(density)}.`,
+      tone: 'motion',
+    };
+  }
+
+  return {
+    title: 'Watch the cluster',
+    body: `The clearest signal is the pressure peak at strike ${stats.strongest.strike}. The rest of the frame is comparatively muted.`,
+    tone: 'steady',
+  };
+}
+
 function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
   if (!frame || !previousFrame) {
     return [];
@@ -331,13 +391,35 @@ function Tooltip({ point }) {
   );
 }
 
-function MetricCard({ label, value, hint }) {
+function ReadingGuide({ demoMode, demoBeat, diagnosis }) {
   return (
-    <div className="metric-card">
-      <p className="metric-label">{label}</p>
-      <p className="metric-value">{value}</p>
-      <p className="metric-hint">{hint}</p>
-    </div>
+    <section className="orientation-panel" aria-label="How to read this market frame">
+      <div className={`diagnosis-card diagnosis-card-${diagnosis.tone}`}>
+        <p className="panel-kicker">Frame diagnosis</p>
+        <h2 className="diagnosis-title">{diagnosis.title}</h2>
+        <p className="diagnosis-copy">{diagnosis.body}</p>
+      </div>
+
+      <div className="reading-guide-grid">
+        {READING_GUIDE.map((item) => (
+          <article className="reading-card" key={item.label}>
+            <p className="reading-label">{item.label}</p>
+            <h3 className="reading-title">{item.title}</h3>
+            <p className="reading-copy">{item.body}</p>
+          </article>
+        ))}
+      </div>
+
+      <div className="story-note">
+        <p className="panel-kicker">{demoMode ? 'Story lens' : 'Explore lens'}</p>
+        <h3 className="story-note-title">{demoMode ? demoBeat.title : 'Free inspection'}</h3>
+        <p className="story-note-copy">
+          {demoMode
+            ? demoBeat.body
+            : 'Scrub the replay and hover the chart to inspect individual lanes. The summary cards update with each frame.'}
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -680,22 +762,32 @@ function App() {
   const previousStats = deriveFrameStats(buildSeries(previousFrame, strikeMin, strikeMax));
   const priceChange = frameStats.currentPrice - previousStats.currentPrice;
   const events = buildEventMarkers(frame, previousFrame, frameStats, strikeMin, strikeMax);
+  const diagnosis = buildFrameDiagnosis(frame, frameStats, priceChange);
 
   return (
     <main className="app-shell">
       {/* Slim header bar */}
       <header className="hero-bar">
         <div className="hero-bar-left">
-          <h1 className="hero-bar-title">Market Pressure Map</h1>
+          <span className="brand-mark" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <div>
+            <p className="hero-bar-kicker">Biomimetic market replay</p>
+            <h1 className="hero-bar-title">Market Organism</h1>
+          </div>
           <span className={`demo-pill ${demoMode ? 'demo-pill-live' : ''}`}>
             {demoMode ? 'Story mode' : 'Explore mode'}
           </span>
         </div>
-        <p className="hero-bar-sub">Pressure · Liquidity · Volatility · Price</p>
+        <p className="hero-bar-sub">Turns order-book flow into a readable pressure landscape.</p>
       </header>
 
       <section className="stage-panel">
         <div className="stage-workspace">
+          <ReadingGuide demoMode={demoMode} demoBeat={demoBeat} diagnosis={diagnosis} />
 
           {/* Full-width chart column */}
           <div className="chart-column">
@@ -754,40 +846,44 @@ function App() {
               <h2 className="rail-title">{formatTimestamp(frame.timestamp)}</h2>
               <div className="rail-mini-stats">
                 <div className="rail-stat">
-                  <p className="panel-kicker">Health</p>
+                  <p className="panel-kicker">Market health</p>
                   <p className="rail-stat-value">{frame.health_score.toFixed(2)}</p>
+                  <p className="rail-stat-hint">Higher means calmer structure.</p>
                 </div>
                 <div className="rail-stat">
-                  <p className="panel-kicker">Bias</p>
+                  <p className="panel-kicker">Flow lean</p>
                   <p className="rail-stat-value">{balance}</p>
+                  <p className="rail-stat-hint">Which side dominates this frame.</p>
                 </div>
               </div>
             </div>
 
             {/* Card 2: Metrics + Price */}
             <div className="rail-section">
-              <p className="panel-kicker">Metrics</p>
-              <div className="metric-grid-rail" style={{marginTop:'0.45rem'}}>
+              <p className="panel-kicker">Current signals</p>
+              <div className="metric-grid-rail">
                 <div className="metric-card">
-                  <p className="metric-label">Liquidity</p>
+                  <p className="metric-label">Liquidity coverage</p>
                   <p className="metric-value">{formatPercent(frame.liquidity_density_factor)}</p>
+                  <p className="metric-hint">Visible support across lanes.</p>
                 </div>
                 <div className="metric-card">
-                  <p className="metric-label">Volatility</p>
+                  <p className="metric-label">Stress signal</p>
                   <p className="metric-value">{formatPercent(frame.manipulation_factor)}</p>
+                  <p className="metric-hint">Separation between sides.</p>
                 </div>
               </div>
               <div className="price-strip-rail">
                 <div className="price-box">
-                  <p className="panel-kicker">Price</p>
+                  <p className="panel-kicker">Weighted price</p>
                   <p className="price-value">{frameStats.currentPrice.toFixed(1)}</p>
                 </div>
                 <div className="price-box">
-                  <p className="panel-kicker">Change</p>
-                  <p className={`price-value ${priceChange >= 0 ? 'price-up' : 'price-down'}`}>{priceChange >= 0 ? '+' : ''}{priceChange.toFixed(1)}</p>
+                  <p className="panel-kicker">Frame change</p>
+                  <p className={`price-value ${priceChange >= 0 ? 'price-up' : 'price-down'}`}>{formatSigned(priceChange)}</p>
                 </div>
                 <div className="price-box">
-                  <p className="panel-kicker">Spread</p>
+                  <p className="panel-kicker">Lane spread</p>
                   <p className="price-value">{frameStats.spread.toFixed(1)}</p>
                 </div>
               </div>
@@ -795,18 +891,18 @@ function App() {
 
             {/* Card 3: Strongest lane */}
             <div className="rail-section">
-              <p className="panel-kicker">Strongest lane</p>
+              <p className="panel-kicker">Pressure focus</p>
               <h2 className="detail-title">Lane {frameStats.strongest.index + 1}</h2>
               <p className="detail-copy">Strike {frameStats.strongest.strike}</p>
-              <p className="detail-copy" style={{marginTop:'0.35rem'}}>
-                Highest combined pressure. Marked on chart with a gold ring.
+              <p className="detail-copy detail-copy-spaced">
+                This lane has the highest combined ask and bid pressure. It is marked on the chart with a gold ring.
               </p>
             </div>
 
             {/* Card 4: Events */}
             <div className="rail-section">
               <div className="panel-head">
-                <p className="panel-kicker">Event markers</p>
+                <p className="panel-kicker">Watch list</p>
                 <span className="timeline-caption">alerts</span>
               </div>
               <div className="event-list event-list-rail">
@@ -847,77 +943,79 @@ function App() {
             />
           </div>
 
-          <div className="dock-actions">
-            <button
-              type="button"
-              className="action-button"
-              onClick={() => {
-                if (playhead >= maxPlayhead) {
+          <div className="dock-side">
+            <div className="dock-actions">
+              <button
+                type="button"
+                className="action-button"
+                onClick={() => {
+                  if (playhead >= maxPlayhead) {
+                    setPlayhead(0);
+                  }
+                  setDemoMode(false);
+                  setFocusedKey('');
+                  setPinnedInfo('');
+                  setIsPlaying((value) => !value);
+                }}
+              >
+                {isPlaying && !demoMode ? 'Pause' : 'Play'}
+              </button>
+              <button
+                type="button"
+                className="action-button action-button-emphasis"
+                onClick={() => {
                   setPlayhead(0);
-                }
-                setDemoMode(false);
-                setFocusedKey('');
-                setPinnedInfo('');
-                setIsPlaying((value) => !value);
-              }}
-            >
-              {isPlaying && !demoMode ? 'Pause' : 'Play'}
-            </button>
-            <button
-              type="button"
-              className="action-button action-button-emphasis"
-              onClick={() => {
-                setPlayhead(0);
-                setSpeed(1);
-                setDemoMode(true);
-                setFocusedKey(DEMO_BEATS[0].focus);
-                setPinnedInfo('');
-                setActivePoint(null);
-                setIsPlaying(true);
-              }}
-            >
-              Story mode
-            </button>
-            <button
-              type="button"
-              className="action-button action-button-muted"
-              onClick={() => {
-                setPlayhead(0);
-                setIsPlaying(false);
-                setDemoMode(false);
-                setFocusedKey('');
-                setPinnedInfo('');
-                setActivePoint(null);
-              }}
-            >
-              Reset
-            </button>
-            <label className="speed-control" htmlFor="speed">
-              Speed
-              <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-                <option value={0.5}>0.5x</option>
-                <option value={1}>1x</option>
-                <option value={1.5}>1.5x</option>
-                <option value={2}>2x</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
-              onClick={() => setFollowPrice((value) => !value)}
-            >
-              {followPrice ? 'Follow price' : 'Unlock price'}
-            </button>
-          </div>
-
-          <div className="summary-grid summary-grid-dock">
-            <div className="summary-card">
-              <p className="summary-label">Strike range</p>
-              <p className="summary-value">{strikeMin} to {strikeMax}</p>
+                  setSpeed(1);
+                  setDemoMode(true);
+                  setFocusedKey(DEMO_BEATS[0].focus);
+                  setPinnedInfo('');
+                  setActivePoint(null);
+                  setIsPlaying(true);
+                }}
+              >
+                Story mode
+              </button>
+              <button
+                type="button"
+                className="action-button action-button-muted"
+                onClick={() => {
+                  setPlayhead(0);
+                  setIsPlaying(false);
+                  setDemoMode(false);
+                  setFocusedKey('');
+                  setPinnedInfo('');
+                  setActivePoint(null);
+                }}
+              >
+                Reset
+              </button>
+              <label className="speed-control" htmlFor="speed">
+                <span>Speed</span>
+                <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
+                  <option value={0.5}>0.5x</option>
+                  <option value={1}>1x</option>
+                  <option value={1.5}>1.5x</option>
+                  <option value={2}>2x</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
+                onClick={() => setFollowPrice((value) => !value)}
+              >
+                {followPrice ? 'Follow price' : 'Unlock price'}
+              </button>
             </div>
-            <div className="summary-card">
-              <p className="summary-label">Order density</p>
-              <p className="summary-value">{formatPercent(frame.order_density)}</p>
+
+            <div className="summary-grid summary-grid-dock">
+              <div className="summary-card">
+                <p className="summary-label">Strike range</p>
+                <p className="summary-value">{strikeMin} to {strikeMax}</p>
+              </div>
+              <div className="summary-card">
+                <p className="summary-label">Visible order coverage</p>
+                <p className="summary-value">{formatPercent(frame.order_density)}</p>
+              </div>
             </div>
           </div>
         </div>
