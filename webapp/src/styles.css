@@ -201,12 +201,13 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   gap: 0.75rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .replay-main {
   min-width: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.65rem;
 }
 
@@ -214,6 +215,7 @@ body {
   display: grid;
   gap: 0.75rem;
   min-width: 0;
+  align-content: start;
 }
 
 .diagnosis-card {
@@ -310,6 +312,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1;
 }
 
 .stage-header-inline {
