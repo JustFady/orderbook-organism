@@ -153,6 +153,59 @@ body {
   overflow: visible;
 }
 
+/* Top controls */
+.top-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.page-nav {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.28rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.page-nav-button {
+  min-height: 2.3rem;
+  padding: 0.45rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.84rem;
+}
+
+.page-nav-button-active {
+  background: rgba(123, 200, 234, 0.12);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(123, 200, 234, 0.18);
+}
+
+.source-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.source-picker select {
+  min-height: 2.35rem;
+  min-width: 13rem;
+  color: var(--text);
+  border-radius: 999px;
+  border: 1px solid rgba(123, 200, 234, 0.2);
+  background: rgba(123, 200, 234, 0.08);
+  padding: 0.4rem 0.85rem;
+}
+
 /* Stage workspace */
 .stage-workspace {
   display: flex;
@@ -160,17 +213,24 @@ body {
   gap: 0.85rem;
 }
 
-/* Orientation */
-.orientation-panel {
+.replay-layout {
   display: grid;
-  grid-template-columns: minmax(270px, 0.85fr) minmax(420px, 1.6fr) minmax(260px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   gap: 0.75rem;
-  align-items: stretch;
+  align-items: start;
 }
 
-.diagnosis-card,
-.reading-card,
-.story-note {
+.replay-main {
+  min-width: 0;
+}
+
+.replay-context-panel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.diagnosis-card {
   min-width: 0;
   padding: 0.9rem;
   border-radius: 12px;
@@ -195,9 +255,7 @@ body {
 .diagnosis-card-motion::before { background: var(--gold); }
 .diagnosis-card-steady::before { background: var(--green); }
 
-.diagnosis-title,
-.story-note-title,
-.reading-title {
+.diagnosis-title {
   margin: 0.25rem 0 0;
   font-family: 'Sora', sans-serif;
   font-weight: 600;
@@ -208,28 +266,36 @@ body {
   font-size: 1rem;
 }
 
-.diagnosis-copy,
-.story-note-copy,
-.reading-copy {
+.diagnosis-copy {
   margin: 0.35rem 0 0;
   color: var(--muted);
   line-height: 1.45;
   font-size: 0.82rem;
 }
 
-.reading-guide-grid {
+.context-card {
+  padding: 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.context-card .event-chip {
+  margin-top: 0.6rem;
+}
+
+.context-controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.reading-card {
-  padding: 0.8rem;
-}
-
-.reading-label {
+.quick-guide-label {
   width: fit-content;
-  margin: 0;
+  max-width: 100%;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
   background: rgba(123, 200, 234, 0.08);
@@ -237,18 +303,6 @@ body {
   color: #bfe5f4;
   font-size: 0.68rem;
   font-weight: 700;
-}
-
-.reading-title,
-.story-note-title {
-  font-size: 0.88rem;
-}
-
-.story-note {
-  background:
-    radial-gradient(circle at top right, rgba(239, 195, 106, 0.1), transparent 50%),
-    rgba(255, 255, 255, 0.04);
-  border-color: rgba(239, 195, 106, 0.13);
 }
 
 /* Chart column */
@@ -307,7 +361,7 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 1080 / 650;
+  aspect-ratio: 1080 / 760;
   border-radius: 14px;
   overflow: hidden;
 }
@@ -316,10 +370,10 @@ body {
 .plot-frame { fill: rgba(255,255,255,0.02); stroke: rgba(255,255,255,0.06); }
 .grid-line { stroke: rgba(255,255,255,0.07); stroke-width: 1; stroke-dasharray: 4 8; }
 .axis-line, .axis-tick { stroke: rgba(255,255,255,0.22); stroke-width: 1.4; }
-.axis-text, .axis-label, .axis-caption, .chart-key-text, .chart-key-title { fill: rgba(236,244,248,0.76); font-size: 13px; }
+.axis-text, .axis-label, .axis-caption, .chart-key-text, .chart-key-title { fill: rgba(236,244,248,0.76); font-size: 14px; }
 .axis-left { text-anchor: end; }
-.axis-label { font-size: 14px; text-transform: uppercase; }
-.axis-caption { font-size: 15px; font-weight: 600; fill: rgba(236,244,248,0.82); }
+.axis-label { font-size: 16px; text-transform: uppercase; }
+.axis-caption { font-size: 17px; font-weight: 600; fill: rgba(236,244,248,0.82); }
 .pressure-line { fill: none; stroke: rgba(198,236,249,0.92); stroke-width: 3; }
 .price-line { stroke: rgba(255,255,255,0.42); stroke-width: 2; stroke-dasharray: 7 6; }
 .price-line-follow { stroke: rgba(239,195,106,0.86); }
@@ -327,9 +381,10 @@ body {
 .event-marker { pointer-events: none; }
 .event-stem { stroke: rgba(255,255,255,0.28); stroke-width: 1.4; stroke-dasharray: 3 5; }
 .event-anchor { fill: currentColor; stroke: rgba(255,255,255,0.42); stroke-width: 1.2; }
-.event-pill { fill: rgba(8,14,24,0.9); stroke: currentColor; stroke-opacity: 0.36; }
-.event-label { fill: rgba(236,244,248,0.96); font-size: 11px; font-weight: 700; }
-.event-detail { fill: rgba(236,244,248,0.7); font-size: 10px; }
+.event-halo { fill: currentColor; opacity: 0.2; }
+.event-pill { fill: rgba(8,14,24,0.94); stroke: currentColor; stroke-opacity: 0.5; }
+.event-label { fill: rgba(236,244,248,0.98); font-size: 12px; font-weight: 700; }
+.event-detail { fill: rgba(236,244,248,0.82); font-size: 10px; }
 .event-marker-gamma { color: #f2d390; }
 .event-marker-liquidity { color: #7bc8ea; }
 .event-marker-manipulation { color: #f28c54; }
@@ -440,7 +495,7 @@ body {
 /* Insight rail */
 .insight-rail {
   display: grid;
-  grid-template-columns: minmax(250px, 0.95fr) minmax(340px, 1.35fr) minmax(250px, 0.95fr) minmax(300px, 1.15fr);
+  grid-template-columns: minmax(250px, 0.9fr) minmax(360px, 1.35fr) minmax(260px, 0.95fr);
   gap: 0.75rem;
   align-items: stretch;
 }
@@ -583,12 +638,143 @@ body {
 .event-chip-manipulation { border-color: rgba(242,140,84,0.22); background: rgba(242,140,84,0.08); }
 .event-chip-muted { background: rgba(255,255,255,0.03); }
 
+.rail-section-why {
+  background:
+    linear-gradient(135deg, rgba(239, 195, 106, 0.09), rgba(123, 200, 234, 0.04)),
+    rgba(255, 255, 255, 0.04);
+  border-color: rgba(239, 195, 106, 0.15);
+  grid-column: 1 / -1;
+}
+
+/* Bookmarks */
+.bookmark-panel,
+.content-page {
+  padding: 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.bookmark-title,
+.content-title {
+  margin: 0.25rem 0 0;
+  font-family: 'Sora', sans-serif;
+  font-size: 1rem;
+}
+
+.bookmark-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.bookmark-card {
+  display: grid;
+  gap: 0.25rem;
+  min-height: 6.5rem;
+  padding: 0.75rem;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.bookmark-card-active,
+.bookmark-card:hover {
+  border-color: rgba(123, 200, 234, 0.35);
+  background: rgba(123, 200, 234, 0.08);
+}
+
+.bookmark-card-liquidity { border-color: rgba(123, 200, 234, 0.18); }
+.bookmark-card-manipulation { border-color: rgba(242, 140, 84, 0.18); }
+.bookmark-card-gamma { border-color: rgba(239, 195, 106, 0.18); }
+.bookmark-card-steady { border-color: rgba(141, 214, 165, 0.18); }
+
+.bookmark-label {
+  font-family: 'Sora', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.bookmark-detail,
+.bookmark-time {
+  color: var(--muted);
+  line-height: 1.35;
+  font-size: 0.76rem;
+}
+
+/* Content pages */
+.content-page {
+  min-height: 52vh;
+}
+
+.content-page-head {
+  max-width: 760px;
+}
+
+.content-copy {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.tour-grid,
+.glossary-grid,
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.tour-card,
+.glossary-card,
+.guide-card {
+  padding: 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.tour-section {
+  margin-top: 1.1rem;
+}
+
+.tour-step {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: rgba(239, 195, 106, 0.14);
+  color: #f2d390;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.tour-title,
+.glossary-term,
+.guide-title {
+  margin: 0.65rem 0 0;
+  font-family: 'Sora', sans-serif;
+  font-size: 0.95rem;
+}
+
+.tour-copy,
+.glossary-definition,
+.guide-copy {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.84rem;
+}
+
 /* Dock panel */
 .dock-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(520px, 0.42fr);
-  gap: 0.75rem;
-  align-items: stretch;
+  display: block;
   padding: 0.9rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -596,19 +782,12 @@ body {
 }
 
 .dock-primary,
-.dock-side,
 .summary-grid-dock {
   padding: 0.75rem;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   min-width: 0;
-}
-
-.dock-side {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(185px, 0.72fr);
-  gap: 0.75rem;
 }
 
 .dock-actions {
@@ -621,6 +800,7 @@ body {
 
 .summary-grid-dock {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 0.5rem;
   align-content: start;
   padding: 0;
@@ -746,19 +926,16 @@ input[type='range'] {
 
 /* Responsive */
 @media (max-width: 1380px) {
-  .orientation-panel {
+  .replay-layout {
     grid-template-columns: 1fr;
   }
-  .reading-guide-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .insight-rail {
+  .bookmark-grid,
+  .tour-grid,
+  .glossary-grid,
+  .guide-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .dock-panel {
-    grid-template-columns: 1fr;
-  }
-  .dock-side {
+  .insight-rail {
     grid-template-columns: 1fr 1fr;
   }
   .dock-actions {
@@ -777,11 +954,30 @@ input[type='range'] {
   .insight-rail {
     grid-template-columns: 1fr;
   }
-  .reading-guide-grid {
+  .replay-context-panel {
     grid-template-columns: 1fr;
   }
-  .dock-panel,
-  .dock-side,
+  .replay-layout {
+    gap: 0.7rem;
+  }
+  .bookmark-grid,
+  .tour-grid,
+  .glossary-grid,
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .top-controls,
+  .source-picker,
+  .source-picker select,
+  .page-nav {
+    width: 100%;
+  }
+  .page-nav {
+    justify-content: space-between;
+  }
+  .page-nav-button {
+    flex: 1;
+  }
   .dock-actions {
     grid-template-columns: 1fr;
   }

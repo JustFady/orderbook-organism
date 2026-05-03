@@ -6,7 +6,7 @@ const EXPLAINERS = {
     body: 'The filled ridge shows combined market pressure at each lane. Higher shape means stronger combined ask and bid activity there.',
   },
   volatility: {
-    title: 'Volatility line',
+    title: 'Stress line',
     body: 'The orange line shows instability. When it rises, the market is behaving less smoothly and the frame is more stressed.',
   },
   bid: {
@@ -45,6 +45,66 @@ const READING_GUIDE = [
     label: 'Stress',
     title: 'When the surface gets unstable',
     body: 'The orange line rises when bid and ask flow split apart. That is the warning signal for rougher behavior.',
+  },
+];
+
+const REPLAY_SOURCES = [
+  {
+    id: 'april-22',
+    label: 'April 22 sample',
+    detail: 'Original prototype replay',
+    path: 'data/replay_frames.json',
+  },
+  {
+    id: '0922',
+    label: '09:22 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0922.json',
+  },
+  {
+    id: '0923',
+    label: '09:23 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0923.json',
+  },
+  {
+    id: '0924',
+    label: '09:24 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0924.json',
+  },
+  {
+    id: '0926',
+    label: '09:26 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0926.json',
+  },
+];
+
+const GLOSSARY_TERMS = [
+  {
+    term: 'Strike lane',
+    definition: 'A bucketed strike position. Read the chart left to right as nearby price/strike regions.',
+  },
+  {
+    term: 'Pressure ridge',
+    definition: 'Combined ask and bid flow at each lane. Peaks show where activity is concentrating.',
+  },
+  {
+    term: 'Liquidity',
+    definition: 'Visible support from the order book. Blue marks bid support; gold marks ask concentration.',
+  },
+  {
+    term: 'Stress signal',
+    definition: 'A warning line based on split behavior between the two sides of the book.',
+  },
+  {
+    term: 'Flow lean',
+    definition: 'Whether ask-side or bid-side activity dominates the current frame.',
+  },
+  {
+    term: 'Weighted price',
+    definition: 'A pressure-weighted center of the current frame, shown with the vertical dashed line.',
   },
 ];
 
@@ -87,17 +147,20 @@ function interpolateFrame(current, next, alpha) {
   };
 }
 
-function useReplayData() {
+function useReplayData(sourcePath) {
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
+    setPayload(null);
+    setError('');
+    setLoading(true);
 
     async function load() {
       try {
-        const response = await fetch('data/replay_frames.json', { cache: 'no-store' });
+        const response = await fetch(sourcePath, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Failed to load replay data: ${response.status}`);
         }
@@ -120,7 +183,7 @@ function useReplayData() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [sourcePath]);
 
   return { payload, error, loading };
 }
@@ -346,14 +409,84 @@ function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
     );
   }
 
-  return markers
+  const visibleMarkers = markers
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((marker, index) => ({
+    .slice(0, 3);
+
+  return visibleMarkers.map((marker, index) => ({
       ...marker,
-      laneX: clamp(marker.laneX, 146, 924),
-      anchorY: clamp(marker.anchorY + index * 8, 128, 544),
+      laneX: clamp(marker.laneX + (index - (visibleMarkers.length - 1) / 2) * 92, 162, 908),
+      anchorY: clamp(marker.anchorY + index * 24, 128, 544),
     }));
+}
+
+function buildEventBookmarks(frames, strikeMin, strikeMax) {
+  if (!frames.length) {
+    return [];
+  }
+
+  const scored = frames.map((frame, index) => {
+    const previous = frames[Math.max(index - 1, 0)];
+    const series = buildSeries(frame, strikeMin, strikeMax);
+    const stats = deriveFrameStats(series);
+    const events = buildEventMarkers(frame, previous, stats, strikeMin, strikeMax);
+    return {
+      index,
+      frame,
+      stats,
+      events,
+      stress: Number(frame.manipulation_factor ?? 0),
+      health: Number(frame.health_score ?? 0),
+      liquidity: Number(frame.liquidity_density_factor ?? 0),
+      pressure: Number(stats.strongest?.pressure ?? 0),
+    };
+  });
+
+  const findBest = (id, label, detail, pick, tone) => {
+    const match = pick(scored);
+    if (!match) {
+      return null;
+    }
+    return {
+      id,
+      label,
+      detail,
+      tone,
+      index: match.index,
+      timestamp: match.frame.timestamp,
+    };
+  };
+
+  return [
+    findBest(
+      'liquidity',
+      'Liquidity drop',
+      'Jump to the thinnest visible support.',
+      (items) => items.reduce((best, item) => (item.liquidity < best.liquidity ? item : best), items[0]),
+      'liquidity',
+    ),
+    findBest(
+      'stress',
+      'Stress spike',
+      'Jump to the roughest book behavior.',
+      (items) => items.reduce((best, item) => (item.stress > best.stress ? item : best), items[0]),
+      'manipulation',
+    ),
+    findBest(
+      'pressure',
+      'Pressure cluster',
+      'Jump to the strongest lane cluster.',
+      (items) => items.reduce((best, item) => (item.pressure > best.pressure ? item : best), items[0]),
+      'gamma',
+    ),
+    findBest(
+      'stable',
+      'Stable frame',
+      'Jump to the calmest readable frame.',
+      (items) => items.reduce((best, item) => (item.health > best.health ? item : best), items[0]),
+      'steady',
+    ),
+  ].filter(Boolean);
 }
 
 function buildArea(points, floorY) {
@@ -386,38 +519,261 @@ function Tooltip({ point }) {
       <p className="tooltip-line">Pressure: <strong>{point.pressure.toFixed(2)}</strong></p>
       <p className="tooltip-line">Bid liquidity: <strong>{point.bid.toFixed(2)}</strong></p>
       <p className="tooltip-line">Ask liquidity: <strong>{point.ask.toFixed(2)}</strong></p>
-      <p className="tooltip-line">Volatility: <strong>{point.volatility.toFixed(2)}</strong></p>
+      <p className="tooltip-line">Stress: <strong>{point.volatility.toFixed(2)}</strong></p>
     </div>
   );
 }
 
-function ReadingGuide({ demoMode, demoBeat, diagnosis }) {
+function ReplayContextPanel({
+  diagnosis,
+  events,
+  playhead,
+  maxPlayhead,
+  isPlaying,
+  demoMode,
+  setPlayhead,
+  setDemoMode,
+  setFocusedKey,
+  setPinnedInfo,
+  setActivePoint,
+  setIsPlaying,
+  setSpeed,
+  speed,
+  followPrice,
+  setFollowPrice,
+  strikeMin,
+  strikeMax,
+  frame,
+}) {
+  const primaryEvent = events[0];
+
   return (
-    <section className="orientation-panel" aria-label="How to read this market frame">
+    <aside className="replay-context-panel" aria-label="Replay context">
       <div className={`diagnosis-card diagnosis-card-${diagnosis.tone}`}>
         <p className="panel-kicker">Frame diagnosis</p>
         <h2 className="diagnosis-title">{diagnosis.title}</h2>
         <p className="diagnosis-copy">{diagnosis.body}</p>
       </div>
 
-      <div className="reading-guide-grid">
-        {READING_GUIDE.map((item) => (
-          <article className="reading-card" key={item.label}>
-            <p className="reading-label">{item.label}</p>
-            <h3 className="reading-title">{item.title}</h3>
-            <p className="reading-copy">{item.body}</p>
+      <section className="context-card" aria-label="Current event">
+        <div className="panel-head">
+          <p className="panel-kicker">Current event</p>
+          <span className="timeline-caption">{events.length ? 'alert' : 'quiet'}</span>
+        </div>
+        {primaryEvent ? (
+          <div className={`event-chip event-chip-${primaryEvent.tone}`}>
+            <p className="event-chip-label">{primaryEvent.label}</p>
+            <p className="event-chip-detail">{primaryEvent.detail}</p>
+          </div>
+        ) : (
+          <div className="event-chip event-chip-muted">
+            <p className="event-chip-label">No major event</p>
+            <p className="event-chip-detail">Below alert thresholds.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="context-controls" aria-label="Replay controls and summary">
+        <div className="dock-actions">
+          <button
+            type="button"
+            className="action-button"
+            onClick={() => {
+              if (playhead >= maxPlayhead) {
+                setPlayhead(0);
+              }
+              setDemoMode(false);
+              setFocusedKey('');
+              setPinnedInfo('');
+              setIsPlaying((value) => !value);
+            }}
+          >
+            {isPlaying && !demoMode ? 'Pause' : 'Play'}
+          </button>
+          <button
+            type="button"
+            className="action-button action-button-emphasis"
+            onClick={() => {
+              setPlayhead(0);
+              setSpeed(1);
+              setDemoMode(true);
+              setFocusedKey(DEMO_BEATS[0].focus);
+              setPinnedInfo('');
+              setActivePoint(null);
+              setIsPlaying(true);
+            }}
+          >
+            Guided tour
+          </button>
+          <button
+            type="button"
+            className="action-button action-button-muted"
+            onClick={() => {
+              setPlayhead(0);
+              setIsPlaying(false);
+              setDemoMode(false);
+              setFocusedKey('');
+              setPinnedInfo('');
+              setActivePoint(null);
+            }}
+          >
+            Reset
+          </button>
+          <label className="speed-control" htmlFor="speed">
+            <span>Speed</span>
+            <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={1.5}>1.5x</option>
+              <option value={2}>2x</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
+            onClick={() => setFollowPrice((value) => !value)}
+          >
+            {followPrice ? 'Follow price' : 'Unlock price'}
+          </button>
+        </div>
+
+        <div className="summary-grid summary-grid-dock">
+          <div className="summary-card">
+            <p className="summary-label">Strike range</p>
+            <p className="summary-value">{strikeMin} to {strikeMax}</p>
+          </div>
+          <div className="summary-card">
+            <p className="summary-label">Visible order coverage</p>
+            <p className="summary-value">{formatPercent(frame.order_density)}</p>
+          </div>
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function PageNav({ activePage, onChange }) {
+  const pages = [
+    { id: 'replay', label: 'Replay' },
+    { id: 'tour', label: 'Guided tour' },
+    { id: 'glossary', label: 'Glossary' },
+  ];
+
+  return (
+    <nav className="page-nav" aria-label="App sections">
+      {pages.map((page) => (
+        <button
+          key={page.id}
+          type="button"
+          className={`page-nav-button ${activePage === page.id ? 'page-nav-button-active' : ''}`}
+          onClick={() => onChange(page.id)}
+        >
+          {page.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function ReplaySourcePicker({ selectedSource, onChange }) {
+  return (
+    <label className="source-picker" htmlFor="replay-source">
+      <span>Replay source</span>
+      <select id="replay-source" value={selectedSource} onChange={(event) => onChange(event.target.value)}>
+        {REPLAY_SOURCES.map((source) => (
+          <option key={source.id} value={source.id}>
+            {source.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function GuidedTourPage({ bookmarks, activeIndex, onJump }) {
+  return (
+    <section className="content-page" aria-label="Guided tour">
+      <div className="content-page-head">
+        <p className="panel-kicker">Presentation path</p>
+        <h2 className="content-title">A clean way to explain the organism</h2>
+        <p className="content-copy">
+          Use this page as the talk track: introduce the visual grammar first, then use bookmarks in the replay to show real moments.
+        </p>
+      </div>
+      <div className="tour-grid">
+        {DEMO_BEATS.map((beat, index) => (
+          <article className="tour-card" key={beat.title}>
+            <span className="tour-step">{index + 1}</span>
+            <h3 className="tour-title">{beat.title}</h3>
+            <p className="tour-copy">{beat.body}</p>
           </article>
         ))}
       </div>
+      <section className="tour-section" aria-label="How to read the visualization">
+        <div className="content-page-head">
+          <p className="panel-kicker">Visual grammar</p>
+          <h2 className="content-title">What each layer means</h2>
+        </div>
+        <div className="guide-grid">
+          {READING_GUIDE.map((item) => (
+            <article className="guide-card" key={item.label}>
+              <span className="quick-guide-label">{item.label}</span>
+              <h3 className="guide-title">{item.title}</h3>
+              <p className="guide-copy">{item.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <EventBookmarks bookmarks={bookmarks} activeIndex={activeIndex} onJump={onJump} />
+    </section>
+  );
+}
 
-      <div className="story-note">
-        <p className="panel-kicker">{demoMode ? 'Story lens' : 'Explore lens'}</p>
-        <h3 className="story-note-title">{demoMode ? demoBeat.title : 'Free inspection'}</h3>
-        <p className="story-note-copy">
-          {demoMode
-            ? demoBeat.body
-            : 'Scrub the replay and hover the chart to inspect individual lanes. The summary cards update with each frame.'}
+function GlossaryPage() {
+  return (
+    <section className="content-page" aria-label="Glossary">
+      <div className="content-page-head">
+        <p className="panel-kicker">Plain-language reference</p>
+        <h2 className="content-title">Glossary</h2>
+        <p className="content-copy">
+          Short definitions for the terms that appear in the visualization.
         </p>
+      </div>
+      <div className="glossary-grid">
+        {GLOSSARY_TERMS.map((item) => (
+          <article className="glossary-card" key={item.term}>
+            <h3 className="glossary-term">{item.term}</h3>
+            <p className="glossary-definition">{item.definition}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EventBookmarks({ bookmarks, activeIndex, onJump }) {
+  return (
+    <section className="bookmark-panel" aria-label="Event bookmarks">
+      <div className="panel-head">
+        <div>
+          <p className="panel-kicker">Event bookmarks</p>
+          <h2 className="bookmark-title">Jump to useful demo moments</h2>
+        </div>
+        <span className="timeline-caption">{bookmarks.length} bookmarks</span>
+      </div>
+      <div className="bookmark-grid">
+        {bookmarks.map((bookmark) => (
+          <button
+            type="button"
+            key={bookmark.id}
+            className={`bookmark-card bookmark-card-${bookmark.tone} ${Math.round(activeIndex) === bookmark.index ? 'bookmark-card-active' : ''}`}
+            onClick={() => onJump(bookmark.index)}
+          >
+            <span className="bookmark-label">{bookmark.label}</span>
+            <span className="bookmark-detail">{bookmark.detail}</span>
+            <span className="bookmark-time">{formatTimestamp(bookmark.timestamp)}</span>
+          </button>
+        ))}
       </div>
     </section>
   );
@@ -467,7 +823,7 @@ function MiniTimeline({ frames, playhead, onJump }) {
       />
       <div className="mini-legend">
         <span><i className="mini-dot mini-dot-health" />Health</span>
-        <span><i className="mini-dot mini-dot-volatility" />Volatility</span>
+        <span><i className="mini-dot mini-dot-volatility" />Stress</span>
       </div>
     </div>
   );
@@ -523,11 +879,12 @@ function DataLandscape({
 
         {eventMarkers.map((marker) => (
           <g key={marker.id} transform={`translate(${marker.laneX}, ${marker.anchorY})`} className={`event-marker event-marker-${marker.tone}`}>
-            <line x1="0" y1="-30" x2="0" y2="0" className="event-stem" />
+            <line x1="0" y1="-40" x2="0" y2="4" className="event-stem" />
+            <circle cx="0" cy="0" r="9" className="event-halo" />
             <circle cx="0" cy="0" r="5" className="event-anchor" />
-            <rect x="-68" y="-64" width="136" height="24" rx="12" className="event-pill" />
-            <text x="0" y="-48" textAnchor="middle" className="event-label">{marker.label}</text>
-            <text x="0" y="-30" textAnchor="middle" className="event-detail">{marker.detail}</text>
+            <rect x="-104" y="-82" width="208" height="42" rx="14" className="event-pill" />
+            <text x="0" y="-63" textAnchor="middle" className="event-label">{marker.label}</text>
+            <text x="0" y="-49" textAnchor="middle" className="event-detail">{marker.detail}</text>
           </g>
         ))}
 
@@ -666,7 +1023,10 @@ function DataLandscape({
 }
 
 function App() {
-  const { payload, error, loading } = useReplayData();
+  const [activePage, setActivePage] = useState('replay');
+  const [selectedSource, setSelectedSource] = useState(REPLAY_SOURCES[0].id);
+  const selectedReplaySource = REPLAY_SOURCES.find((source) => source.id === selectedSource) ?? REPLAY_SOURCES[0];
+  const { payload, error, loading } = useReplayData(selectedReplaySource.path);
   const [playhead, setPlayhead] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -679,6 +1039,14 @@ function App() {
   const frames = payload?.frames ?? [];
   const frameCount = frames.length;
   const maxPlayhead = Math.max(frameCount - 1, 0);
+
+  useEffect(() => {
+    setPlayhead(0);
+    setIsPlaying(false);
+    setFocusedKey('');
+    setPinnedInfo('');
+    setActivePoint(null);
+  }, [selectedSource]);
 
   useEffect(() => {
     if (playhead > maxPlayhead) {
@@ -746,7 +1114,7 @@ function App() {
   if (error || !payload || !frame) {
     return (
       <main className="app-shell app-shell-center">
-        <h1 className="hero-title">Market Pressure Map</h1>
+        <h1 className="hero-title">Orderbook Organism</h1>
         <p className="status">{error || 'No replay frames found at /public/data/replay_frames.json'}</p>
       </main>
     );
@@ -763,6 +1131,16 @@ function App() {
   const priceChange = frameStats.currentPrice - previousStats.currentPrice;
   const events = buildEventMarkers(frame, previousFrame, frameStats, strikeMin, strikeMax);
   const diagnosis = buildFrameDiagnosis(frame, frameStats, priceChange);
+  const eventBookmarks = buildEventBookmarks(frames, strikeMin, strikeMax);
+
+  const jumpToFrame = (index) => {
+    setPlayhead(clamp(index, 0, maxPlayhead));
+    setIsPlaying(false);
+    setFocusedKey('');
+    setPinnedInfo('');
+    setActivePoint(null);
+    setActivePage('replay');
+  };
 
   return (
     <main className="app-shell">
@@ -776,65 +1154,103 @@ function App() {
           </span>
           <div>
             <p className="hero-bar-kicker">Biomimetic market replay</p>
-            <h1 className="hero-bar-title">Market Organism</h1>
+            <h1 className="hero-bar-title">Orderbook Organism</h1>
           </div>
           <span className={`demo-pill ${demoMode ? 'demo-pill-live' : ''}`}>
-            {demoMode ? 'Story mode' : 'Explore mode'}
+            {demoMode ? 'Guided tour' : 'Explore replay'}
           </span>
         </div>
         <p className="hero-bar-sub">Turns order-book flow into a readable pressure landscape.</p>
       </header>
 
+      <div className="top-controls">
+        <PageNav activePage={activePage} onChange={setActivePage} />
+        <ReplaySourcePicker selectedSource={selectedSource} onChange={setSelectedSource} />
+      </div>
+
       <section className="stage-panel">
+        {activePage === 'tour' ? (
+          <GuidedTourPage bookmarks={eventBookmarks} activeIndex={playhead} onJump={jumpToFrame} />
+        ) : null}
+
+        {activePage === 'glossary' ? (
+          <GlossaryPage />
+        ) : null}
+
+        {activePage === 'replay' ? (
+        <>
         <div className="stage-workspace">
-          <ReadingGuide demoMode={demoMode} demoBeat={demoBeat} diagnosis={diagnosis} />
+          <div className="replay-layout">
+            <div className="replay-main">
+              <div className="chart-column">
+                <div className="stage-header stage-header-inline">
+                  <div>
+                    <p className="panel-kicker">{demoMode ? 'Guided step' : 'Current frame'}</p>
+                    <p className="stage-title">{demoMode ? demoBeat.title : formatTimestamp(frame.timestamp)}</p>
+                  </div>
+                  <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
+                </div>
 
-          {/* Full-width chart column */}
-          <div className="chart-column">
-            <div className="stage-header stage-header-inline">
-              <div>
-                <p className="panel-kicker">{demoMode ? 'Story step' : 'Current frame'}</p>
-                <p className="stage-title">{demoMode ? demoBeat.title : formatTimestamp(frame.timestamp)}</p>
+                <div className="plot-legend plot-legend-inline">
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-pressure-line" />
+                    Pressure ridge
+                  </div>
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-volatility-line" />
+                    Stress line
+                  </div>
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-bid" />
+                    Bid liquidity
+                  </div>
+                  <div className="plot-legend-item">
+                    <span className="legend-swatch legend-swatch-ask" />
+                    Ask liquidity
+                  </div>
+                </div>
+
+                <DataLandscape
+                  frame={frame}
+                  previousFrame={previousFrame}
+                  strikeMin={strikeMin}
+                  strikeMax={strikeMax}
+                  focusedKey={focusedKey}
+                  demoBeat={demoMode ? demoBeat : null}
+                  onFocusKey={setFocusedKey}
+                  pinnedInfo={pinnedInfo}
+                  onPinInfo={setPinnedInfo}
+                  activePoint={activePoint}
+                  onHoverPoint={setActivePoint}
+                  onLeavePoint={() => {
+                    setActivePoint(null);
+                    setFocusedKey(demoMode ? demoBeat.focus : '');
+                  }}
+                  followPrice={followPrice}
+                />
               </div>
-              <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
             </div>
 
-            <div className="plot-legend plot-legend-inline">
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-pressure-line" />
-                Pressure ridge
-              </div>
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-volatility-line" />
-                Volatility
-              </div>
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-bid" />
-                Bid liquidity
-              </div>
-              <div className="plot-legend-item">
-                <span className="legend-swatch legend-swatch-ask" />
-                Ask liquidity
-              </div>
-            </div>
-
-            <DataLandscape
-              frame={frame}
-              previousFrame={previousFrame}
+            <ReplayContextPanel
+              diagnosis={diagnosis}
+              events={events}
+              playhead={playhead}
+              maxPlayhead={maxPlayhead}
+              isPlaying={isPlaying}
+              demoMode={demoMode}
+              setPlayhead={setPlayhead}
+              setDemoMode={setDemoMode}
+              setFocusedKey={setFocusedKey}
+              setPinnedInfo={setPinnedInfo}
+              setActivePoint={setActivePoint}
+              setIsPlaying={setIsPlaying}
+              setSpeed={setSpeed}
+              speed={speed}
+              followPrice={followPrice}
+              setFollowPrice={setFollowPrice}
               strikeMin={strikeMin}
               strikeMax={strikeMax}
-              focusedKey={focusedKey}
-              demoBeat={demoMode ? demoBeat : null}
-              onFocusKey={setFocusedKey}
-              pinnedInfo={pinnedInfo}
-              onPinInfo={setPinnedInfo}
-              activePoint={activePoint}
-              onHoverPoint={setActivePoint}
-              onLeavePoint={() => {
-                setActivePoint(null);
-                setFocusedKey(demoMode ? demoBeat.focus : '');
-              }}
-              followPrice={followPrice}
+              frame={frame}
             />
           </div>
 
@@ -899,31 +1315,10 @@ function App() {
               </p>
             </div>
 
-            {/* Card 4: Events */}
-            <div className="rail-section">
-              <div className="panel-head">
-                <p className="panel-kicker">Watch list</p>
-                <span className="timeline-caption">alerts</span>
-              </div>
-              <div className="event-list event-list-rail">
-                {events.length ? events.map((event) => (
-                  <div key={event.id} className={`event-chip event-chip-${event.tone}`}>
-                    <p className="event-chip-label">{event.label}</p>
-                    <p className="event-chip-detail">{event.detail}</p>
-                  </div>
-                )) : (
-                  <div className="event-chip event-chip-muted">
-                    <p className="event-chip-label">No major events</p>
-                    <p className="event-chip-detail">Below alert thresholds.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
           </aside>
         </div>
 
-        <div className="dock-panel" aria-label="Replay controls">
+        <div className="dock-panel" aria-label="Replay timeline">
           <div className="dock-primary">
             <div className="panel-head">
               <label className="timeline-label" htmlFor="timeline">Replay timeline</label>
@@ -942,83 +1337,9 @@ function App() {
               }}
             />
           </div>
-
-          <div className="dock-side">
-            <div className="dock-actions">
-              <button
-                type="button"
-                className="action-button"
-                onClick={() => {
-                  if (playhead >= maxPlayhead) {
-                    setPlayhead(0);
-                  }
-                  setDemoMode(false);
-                  setFocusedKey('');
-                  setPinnedInfo('');
-                  setIsPlaying((value) => !value);
-                }}
-              >
-                {isPlaying && !demoMode ? 'Pause' : 'Play'}
-              </button>
-              <button
-                type="button"
-                className="action-button action-button-emphasis"
-                onClick={() => {
-                  setPlayhead(0);
-                  setSpeed(1);
-                  setDemoMode(true);
-                  setFocusedKey(DEMO_BEATS[0].focus);
-                  setPinnedInfo('');
-                  setActivePoint(null);
-                  setIsPlaying(true);
-                }}
-              >
-                Story mode
-              </button>
-              <button
-                type="button"
-                className="action-button action-button-muted"
-                onClick={() => {
-                  setPlayhead(0);
-                  setIsPlaying(false);
-                  setDemoMode(false);
-                  setFocusedKey('');
-                  setPinnedInfo('');
-                  setActivePoint(null);
-                }}
-              >
-                Reset
-              </button>
-              <label className="speed-control" htmlFor="speed">
-                <span>Speed</span>
-                <select id="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-                  <option value={0.5}>0.5x</option>
-                  <option value={1}>1x</option>
-                  <option value={1.5}>1.5x</option>
-                  <option value={2}>2x</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
-                onClick={() => setFollowPrice((value) => !value)}
-              >
-                {followPrice ? 'Follow price' : 'Unlock price'}
-              </button>
-            </div>
-
-            <div className="summary-grid summary-grid-dock">
-              <div className="summary-card">
-                <p className="summary-label">Strike range</p>
-                <p className="summary-value">{strikeMin} to {strikeMax}</p>
-              </div>
-              <div className="summary-card">
-                <p className="summary-label">Visible order coverage</p>
-                <p className="summary-value">{formatPercent(frame.order_density)}</p>
-              </div>
-            </div>
-          </div>
         </div>
+        </>
+        ) : null}
       </section>
     </main>
   );

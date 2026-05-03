@@ -1,8 +1,9 @@
 .venv/
 __pycache__/
 *.py[cod]
+.mplconfig/
 
 # Generated / oversized artifacts
-data/sample_parse_output/levels.csv
 parsed_scaled/levels.csv
-data/sample_unpack_test/*.stage2
+data/parsed_parts/
+loaded_lob_*.csv.gz
