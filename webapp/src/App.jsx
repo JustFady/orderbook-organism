@@ -348,36 +348,6 @@ function buildFrameDiagnosis(frame, stats, priceChange) {
   };
 }
 
-function buildWhyItMatters(events, diagnosis, stats) {
-  const primaryEvent = events[0];
-
-  if (primaryEvent?.tone === 'liquidity') {
-    return {
-      title: 'Why this matters',
-      body: `A liquidity drop means visible support is thinning near the active price area. In a presentation, this is the moment to ask whether pressure can move more easily through lane ${stats.strongest.index + 1}.`,
-    };
-  }
-
-  if (primaryEvent?.tone === 'manipulation') {
-    return {
-      title: 'Why this matters',
-      body: 'A stress spike means the two sides of the book are splitting apart. That can make the replay look jumpier and less orderly.',
-    };
-  }
-
-  if (primaryEvent?.tone === 'gamma') {
-    return {
-      title: 'Why this matters',
-      body: 'A gamma spike suggests the options-derived pressure layer is more active. It is a useful bookmark for explaining why the surface changes shape.',
-    };
-  }
-
-  return {
-    title: 'Why this matters',
-    body: `${diagnosis.title}: the strongest lane is the cleanest place to anchor attention before introducing the smaller metrics.`,
-  };
-}
-
 function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
   if (!frame || !previousFrame) {
     return [];
@@ -554,7 +524,9 @@ function Tooltip({ point }) {
   );
 }
 
-function ReplayContextPanel({ demoMode, demoBeat, diagnosis, bookmarks, activeIndex, onJump }) {
+function ReplayContextPanel({ diagnosis, events, onOpenTour }) {
+  const primaryEvent = events[0];
+
   return (
     <aside className="replay-context-panel" aria-label="Replay context">
       <div className={`diagnosis-card diagnosis-card-${diagnosis.tone}`}>
@@ -563,32 +535,27 @@ function ReplayContextPanel({ demoMode, demoBeat, diagnosis, bookmarks, activeIn
         <p className="diagnosis-copy">{diagnosis.body}</p>
       </div>
 
-      <div className="story-note">
-        <p className="panel-kicker">{demoMode ? 'Tour lens' : 'Explore lens'}</p>
-        <h3 className="story-note-title">{demoMode ? demoBeat.title : 'Free inspection'}</h3>
-        <p className="story-note-copy">
-          {demoMode
-            ? demoBeat.body
-            : 'Scrub the replay and hover the chart to inspect individual lanes. The summary cards update with each frame.'}
-        </p>
-      </div>
-
-      <section className="quick-guide-panel" aria-label="How to read the frame">
-        <p className="panel-kicker">How to read it</p>
-        <div className="quick-guide-list">
-          {READING_GUIDE.map((item) => (
-            <article className="quick-guide-item" key={item.label}>
-              <span className="quick-guide-label">{item.label}</span>
-              <div>
-                <h3 className="quick-guide-title">{item.title}</h3>
-                <p className="quick-guide-copy">{item.body}</p>
-              </div>
-            </article>
-          ))}
+      <section className="context-card" aria-label="Current event">
+        <div className="panel-head">
+          <p className="panel-kicker">Current event</p>
+          <span className="timeline-caption">{events.length ? 'alert' : 'quiet'}</span>
         </div>
+        {primaryEvent ? (
+          <div className={`event-chip event-chip-${primaryEvent.tone}`}>
+            <p className="event-chip-label">{primaryEvent.label}</p>
+            <p className="event-chip-detail">{primaryEvent.detail}</p>
+          </div>
+        ) : (
+          <div className="event-chip event-chip-muted">
+            <p className="event-chip-label">No major event</p>
+            <p className="event-chip-detail">Below alert thresholds.</p>
+          </div>
+        )}
       </section>
 
-      <EventBookmarks bookmarks={bookmarks} activeIndex={activeIndex} onJump={onJump} compact />
+      <button type="button" className="context-tour-button" onClick={onOpenTour}>
+        View guide and bookmarks
+      </button>
     </aside>
   );
 }
@@ -631,7 +598,7 @@ function ReplaySourcePicker({ selectedSource, onChange }) {
   );
 }
 
-function GuidedTourPage() {
+function GuidedTourPage({ bookmarks, activeIndex, onJump }) {
   return (
     <section className="content-page" aria-label="Guided tour">
       <div className="content-page-head">
@@ -650,6 +617,22 @@ function GuidedTourPage() {
           </article>
         ))}
       </div>
+      <section className="tour-section" aria-label="How to read the visualization">
+        <div className="content-page-head">
+          <p className="panel-kicker">Visual grammar</p>
+          <h2 className="content-title">What each layer means</h2>
+        </div>
+        <div className="guide-grid">
+          {READING_GUIDE.map((item) => (
+            <article className="guide-card" key={item.label}>
+              <span className="quick-guide-label">{item.label}</span>
+              <h3 className="guide-title">{item.title}</h3>
+              <p className="guide-copy">{item.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <EventBookmarks bookmarks={bookmarks} activeIndex={activeIndex} onJump={onJump} />
     </section>
   );
 }
@@ -676,13 +659,13 @@ function GlossaryPage() {
   );
 }
 
-function EventBookmarks({ bookmarks, activeIndex, onJump, compact = false }) {
+function EventBookmarks({ bookmarks, activeIndex, onJump }) {
   return (
-    <section className={`bookmark-panel ${compact ? 'bookmark-panel-compact' : ''}`} aria-label="Event bookmarks">
+    <section className="bookmark-panel" aria-label="Event bookmarks">
       <div className="panel-head">
         <div>
           <p className="panel-kicker">Event bookmarks</p>
-          <h2 className="bookmark-title">{compact ? 'Demo moments' : 'Jump to useful demo moments'}</h2>
+          <h2 className="bookmark-title">Jump to useful demo moments</h2>
         </div>
         <span className="timeline-caption">{bookmarks.length} bookmarks</span>
       </div>
@@ -1056,7 +1039,6 @@ function App() {
   const priceChange = frameStats.currentPrice - previousStats.currentPrice;
   const events = buildEventMarkers(frame, previousFrame, frameStats, strikeMin, strikeMax);
   const diagnosis = buildFrameDiagnosis(frame, frameStats, priceChange);
-  const whyItMatters = buildWhyItMatters(events, diagnosis, frameStats);
   const eventBookmarks = buildEventBookmarks(frames, strikeMin, strikeMax);
 
   const jumpToFrame = (index) => {
@@ -1096,7 +1078,7 @@ function App() {
 
       <section className="stage-panel">
         {activePage === 'tour' ? (
-          <GuidedTourPage />
+          <GuidedTourPage bookmarks={eventBookmarks} activeIndex={playhead} onJump={jumpToFrame} />
         ) : null}
 
         {activePage === 'glossary' ? (
@@ -1158,12 +1140,9 @@ function App() {
             </div>
 
             <ReplayContextPanel
-              demoMode={demoMode}
-              demoBeat={demoBeat}
               diagnosis={diagnosis}
-              bookmarks={eventBookmarks}
-              activeIndex={playhead}
-              onJump={jumpToFrame}
+              events={events}
+              onOpenTour={() => setActivePage('tour')}
             />
           </div>
 
@@ -1226,32 +1205,6 @@ function App() {
               <p className="detail-copy detail-copy-spaced">
                 This lane has the highest combined ask and bid pressure. It is marked on the chart with a gold ring.
               </p>
-            </div>
-
-            {/* Card 4: Events */}
-            <div className="rail-section">
-              <div className="panel-head">
-                <p className="panel-kicker">Watch list</p>
-                <span className="timeline-caption">alerts</span>
-              </div>
-              <div className="event-list event-list-rail">
-                {events.length ? events.map((event) => (
-                  <div key={event.id} className={`event-chip event-chip-${event.tone}`}>
-                    <p className="event-chip-label">{event.label}</p>
-                    <p className="event-chip-detail">{event.detail}</p>
-                  </div>
-                )) : (
-                  <div className="event-chip event-chip-muted">
-                    <p className="event-chip-label">No major events</p>
-                    <p className="event-chip-detail">Below alert thresholds.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rail-section rail-section-why">
-              <p className="panel-kicker">{whyItMatters.title}</p>
-              <p className="detail-copy detail-copy-spaced">{whyItMatters.body}</p>
             </div>
 
           </aside>
