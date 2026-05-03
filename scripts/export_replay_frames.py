@@ -18,6 +18,7 @@ REQUIRED_COLUMNS = [
     "side",
     "future_strike",
     "current_es_price_scaled",
+    "current_es_price",
     "mbo",
     "mbo_pulling_stacking",
     "call_gamma",
@@ -70,7 +71,7 @@ def build_replay_frames(df: pd.DataFrame, num_lanes: int) -> dict:
     grouped = (
         df.groupby("timestamp", as_index=True)
         .agg(
-            es_price=("current_es_price_scaled", "mean"),
+            es_price=("replay_es_price", "mean"),
             liquidity=("mbo_total_size", "mean"),
             manipulation=("manip_abs", "mean"),
             gamma=("gamma_total", "mean"),
@@ -227,6 +228,13 @@ def main() -> None:
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df = df.dropna(subset=["timestamp", "side", "future_strike"])
+
+    if "current_es_price_scaled" in df.columns:
+        df["replay_es_price"] = df["current_es_price_scaled"]
+    elif "current_es_price" in df.columns:
+        df["replay_es_price"] = df["current_es_price"]
+    else:
+        raise ValueError("Missing current_es_price_scaled or current_es_price column")
 
     mbo_parsed = df["mbo"].apply(parse_mbo)
     df["mbo_total_size"] = mbo_parsed.apply(lambda x: x[0])

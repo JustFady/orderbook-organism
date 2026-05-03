@@ -17,7 +17,7 @@ The app replays market state across strike lanes and translates raw flow into a 
 - **Weighted price:** the vertical dashed line tracks the center of the current frame.
 - **Frame diagnosis:** the top card summarizes the current moment in plain English.
 
-Use **Story mode** for a guided walkthrough, or **Explore mode** to scrub the replay and inspect individual lanes.
+Use **Guided tour** for a presentation-friendly walkthrough, or **Explore replay** to scrub the replay and inspect individual lanes. The replay source selector includes the original sample plus recovered real LOB slices from `09:22`, `09:23`, `09:24`, and `09:26`.
 
 ## Run Locally
 
@@ -41,8 +41,13 @@ If port `5173` is busy, Vite will print the correct replacement URL.
 .
 |-- webapp/                         # React/Vite app for the live prototype
 |   |-- public/data/replay_frames.json
+|   |-- public/data/replay_0922.json
+|   |-- public/data/replay_0923.json
+|   |-- public/data/replay_0924.json
+|   |-- public/data/replay_0926.json
 |   `-- src/
 |-- analysis/replay/replay_frames.json
+|-- analysis/replay/replay_*.json
 |-- scripts/                        # Parsing and replay export utilities
 |-- app/dashboard.py                # Streamlit exploratory dashboard
 |-- docs/schema_contract.md         # Data contract notes
@@ -55,12 +60,27 @@ If port `5173` is busy, Vite will print the correct replacement URL.
 1. Source market data lives in `parsed_scaled/`.
 2. Python utilities in `scripts/` parse and shape the data.
 3. `analysis/replay/replay_frames.json` stores the generated replay payload.
-4. `webapp/public/data/replay_frames.json` is the copy consumed by the React app.
+4. `webapp/public/data/*.json` files are the copies consumed by the React app.
 
-When replay data changes, refresh the web copy:
+When replay data changes, refresh the matching web copy:
 
 ```bash
 cp analysis/replay/replay_frames.json webapp/public/data/replay_frames.json
+```
+
+Raw `.csv.gz` LOB blobs can be parsed with:
+
+```bash
+python3 scripts/parse_lob_blob.py --input loaded_lob_20250414__20250414_0922.csv.gz --outdir data/parsed_parts/loaded_lob_20250414__20250414_0922.csv
+```
+
+Then export a replay payload:
+
+```bash
+.venv/bin/python scripts/export_replay_frames.py \
+  --input data/parsed_parts/loaded_lob_20250414__20250414_0922.csv/levels.csv \
+  --output analysis/replay/replay_0922.json \
+  --webapp-output webapp/public/data/replay_0922.json
 ```
 
 ## Useful Commands

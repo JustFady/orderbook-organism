@@ -1,5 +1,5 @@
 {
-  "name": "market-organism-webapp",
+  "name": "orderbook-organism-webapp",
   "private": true,
   "version": "0.1.0",
   "type": "module",

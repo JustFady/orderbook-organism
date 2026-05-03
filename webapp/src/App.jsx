@@ -6,7 +6,7 @@ const EXPLAINERS = {
     body: 'The filled ridge shows combined market pressure at each lane. Higher shape means stronger combined ask and bid activity there.',
   },
   volatility: {
-    title: 'Volatility line',
+    title: 'Stress line',
     body: 'The orange line shows instability. When it rises, the market is behaving less smoothly and the frame is more stressed.',
   },
   bid: {
@@ -45,6 +45,66 @@ const READING_GUIDE = [
     label: 'Stress',
     title: 'When the surface gets unstable',
     body: 'The orange line rises when bid and ask flow split apart. That is the warning signal for rougher behavior.',
+  },
+];
+
+const REPLAY_SOURCES = [
+  {
+    id: 'april-22',
+    label: 'April 22 sample',
+    detail: 'Original prototype replay',
+    path: 'data/replay_frames.json',
+  },
+  {
+    id: '0922',
+    label: '09:22 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0922.json',
+  },
+  {
+    id: '0923',
+    label: '09:23 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0923.json',
+  },
+  {
+    id: '0924',
+    label: '09:24 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0924.json',
+  },
+  {
+    id: '0926',
+    label: '09:26 slice',
+    detail: 'Recovered real LOB minute',
+    path: 'data/replay_0926.json',
+  },
+];
+
+const GLOSSARY_TERMS = [
+  {
+    term: 'Strike lane',
+    definition: 'A bucketed strike position. Read the chart left to right as nearby price/strike regions.',
+  },
+  {
+    term: 'Pressure ridge',
+    definition: 'Combined ask and bid flow at each lane. Peaks show where activity is concentrating.',
+  },
+  {
+    term: 'Liquidity',
+    definition: 'Visible support from the order book. Blue marks bid support; gold marks ask concentration.',
+  },
+  {
+    term: 'Stress signal',
+    definition: 'A warning line based on split behavior between the two sides of the book.',
+  },
+  {
+    term: 'Flow lean',
+    definition: 'Whether ask-side or bid-side activity dominates the current frame.',
+  },
+  {
+    term: 'Weighted price',
+    definition: 'A pressure-weighted center of the current frame, shown with the vertical dashed line.',
   },
 ];
 
@@ -87,17 +147,20 @@ function interpolateFrame(current, next, alpha) {
   };
 }
 
-function useReplayData() {
+function useReplayData(sourcePath) {
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
+    setPayload(null);
+    setError('');
+    setLoading(true);
 
     async function load() {
       try {
-        const response = await fetch('data/replay_frames.json', { cache: 'no-store' });
+        const response = await fetch(sourcePath, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Failed to load replay data: ${response.status}`);
         }
@@ -120,7 +183,7 @@ function useReplayData() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [sourcePath]);
 
   return { payload, error, loading };
 }
@@ -285,6 +348,36 @@ function buildFrameDiagnosis(frame, stats, priceChange) {
   };
 }
 
+function buildWhyItMatters(events, diagnosis, stats) {
+  const primaryEvent = events[0];
+
+  if (primaryEvent?.tone === 'liquidity') {
+    return {
+      title: 'Why this matters',
+      body: `A liquidity drop means visible support is thinning near the active price area. In a presentation, this is the moment to ask whether pressure can move more easily through lane ${stats.strongest.index + 1}.`,
+    };
+  }
+
+  if (primaryEvent?.tone === 'manipulation') {
+    return {
+      title: 'Why this matters',
+      body: 'A stress spike means the two sides of the book are splitting apart. That can make the replay look jumpier and less orderly.',
+    };
+  }
+
+  if (primaryEvent?.tone === 'gamma') {
+    return {
+      title: 'Why this matters',
+      body: 'A gamma spike suggests the options-derived pressure layer is more active. It is a useful bookmark for explaining why the surface changes shape.',
+    };
+  }
+
+  return {
+    title: 'Why this matters',
+    body: `${diagnosis.title}: the strongest lane is the cleanest place to anchor attention before introducing the smaller metrics.`,
+  };
+}
+
 function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
   if (!frame || !previousFrame) {
     return [];
@@ -356,6 +449,75 @@ function buildEventMarkers(frame, previousFrame, stats, strikeMin, strikeMax) {
     }));
 }
 
+function buildEventBookmarks(frames, strikeMin, strikeMax) {
+  if (!frames.length) {
+    return [];
+  }
+
+  const scored = frames.map((frame, index) => {
+    const previous = frames[Math.max(index - 1, 0)];
+    const series = buildSeries(frame, strikeMin, strikeMax);
+    const stats = deriveFrameStats(series);
+    const events = buildEventMarkers(frame, previous, stats, strikeMin, strikeMax);
+    return {
+      index,
+      frame,
+      stats,
+      events,
+      stress: Number(frame.manipulation_factor ?? 0),
+      health: Number(frame.health_score ?? 0),
+      liquidity: Number(frame.liquidity_density_factor ?? 0),
+      pressure: Number(stats.strongest?.pressure ?? 0),
+    };
+  });
+
+  const findBest = (id, label, detail, pick, tone) => {
+    const match = pick(scored);
+    if (!match) {
+      return null;
+    }
+    return {
+      id,
+      label,
+      detail,
+      tone,
+      index: match.index,
+      timestamp: match.frame.timestamp,
+    };
+  };
+
+  return [
+    findBest(
+      'liquidity',
+      'Liquidity drop',
+      'Jump to the thinnest visible support.',
+      (items) => items.reduce((best, item) => (item.liquidity < best.liquidity ? item : best), items[0]),
+      'liquidity',
+    ),
+    findBest(
+      'stress',
+      'Stress spike',
+      'Jump to the roughest book behavior.',
+      (items) => items.reduce((best, item) => (item.stress > best.stress ? item : best), items[0]),
+      'manipulation',
+    ),
+    findBest(
+      'pressure',
+      'Pressure cluster',
+      'Jump to the strongest lane cluster.',
+      (items) => items.reduce((best, item) => (item.pressure > best.pressure ? item : best), items[0]),
+      'gamma',
+    ),
+    findBest(
+      'stable',
+      'Stable frame',
+      'Jump to the calmest readable frame.',
+      (items) => items.reduce((best, item) => (item.health > best.health ? item : best), items[0]),
+      'steady',
+    ),
+  ].filter(Boolean);
+}
+
 function buildArea(points, floorY) {
   if (!points.length) {
     return '';
@@ -386,7 +548,7 @@ function Tooltip({ point }) {
       <p className="tooltip-line">Pressure: <strong>{point.pressure.toFixed(2)}</strong></p>
       <p className="tooltip-line">Bid liquidity: <strong>{point.bid.toFixed(2)}</strong></p>
       <p className="tooltip-line">Ask liquidity: <strong>{point.ask.toFixed(2)}</strong></p>
-      <p className="tooltip-line">Volatility: <strong>{point.volatility.toFixed(2)}</strong></p>
+      <p className="tooltip-line">Stress: <strong>{point.volatility.toFixed(2)}</strong></p>
     </div>
   );
 }
@@ -411,13 +573,124 @@ function ReadingGuide({ demoMode, demoBeat, diagnosis }) {
       </div>
 
       <div className="story-note">
-        <p className="panel-kicker">{demoMode ? 'Story lens' : 'Explore lens'}</p>
+        <p className="panel-kicker">{demoMode ? 'Tour lens' : 'Explore lens'}</p>
         <h3 className="story-note-title">{demoMode ? demoBeat.title : 'Free inspection'}</h3>
         <p className="story-note-copy">
           {demoMode
             ? demoBeat.body
             : 'Scrub the replay and hover the chart to inspect individual lanes. The summary cards update with each frame.'}
         </p>
+      </div>
+    </section>
+  );
+}
+
+function PageNav({ activePage, onChange }) {
+  const pages = [
+    { id: 'replay', label: 'Replay' },
+    { id: 'tour', label: 'Guided tour' },
+    { id: 'glossary', label: 'Glossary' },
+  ];
+
+  return (
+    <nav className="page-nav" aria-label="App sections">
+      {pages.map((page) => (
+        <button
+          key={page.id}
+          type="button"
+          className={`page-nav-button ${activePage === page.id ? 'page-nav-button-active' : ''}`}
+          onClick={() => onChange(page.id)}
+        >
+          {page.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function ReplaySourcePicker({ selectedSource, onChange }) {
+  return (
+    <label className="source-picker" htmlFor="replay-source">
+      <span>Replay source</span>
+      <select id="replay-source" value={selectedSource} onChange={(event) => onChange(event.target.value)}>
+        {REPLAY_SOURCES.map((source) => (
+          <option key={source.id} value={source.id}>
+            {source.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function GuidedTourPage() {
+  return (
+    <section className="content-page" aria-label="Guided tour">
+      <div className="content-page-head">
+        <p className="panel-kicker">Presentation path</p>
+        <h2 className="content-title">A clean way to explain the organism</h2>
+        <p className="content-copy">
+          Use this page as the talk track: introduce the visual grammar first, then use bookmarks in the replay to show real moments.
+        </p>
+      </div>
+      <div className="tour-grid">
+        {DEMO_BEATS.map((beat, index) => (
+          <article className="tour-card" key={beat.title}>
+            <span className="tour-step">{index + 1}</span>
+            <h3 className="tour-title">{beat.title}</h3>
+            <p className="tour-copy">{beat.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GlossaryPage() {
+  return (
+    <section className="content-page" aria-label="Glossary">
+      <div className="content-page-head">
+        <p className="panel-kicker">Plain-language reference</p>
+        <h2 className="content-title">Glossary</h2>
+        <p className="content-copy">
+          Short definitions for the terms that appear in the visualization.
+        </p>
+      </div>
+      <div className="glossary-grid">
+        {GLOSSARY_TERMS.map((item) => (
+          <article className="glossary-card" key={item.term}>
+            <h3 className="glossary-term">{item.term}</h3>
+            <p className="glossary-definition">{item.definition}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EventBookmarks({ bookmarks, activeIndex, onJump }) {
+  return (
+    <section className="bookmark-panel" aria-label="Event bookmarks">
+      <div className="panel-head">
+        <div>
+          <p className="panel-kicker">Event bookmarks</p>
+          <h2 className="bookmark-title">Jump to useful demo moments</h2>
+        </div>
+        <span className="timeline-caption">{bookmarks.length} bookmarks</span>
+      </div>
+      <div className="bookmark-grid">
+        {bookmarks.map((bookmark) => (
+          <button
+            type="button"
+            key={bookmark.id}
+            className={`bookmark-card bookmark-card-${bookmark.tone} ${Math.round(activeIndex) === bookmark.index ? 'bookmark-card-active' : ''}`}
+            onClick={() => onJump(bookmark.index)}
+          >
+            <span className="bookmark-label">{bookmark.label}</span>
+            <span className="bookmark-detail">{bookmark.detail}</span>
+            <span className="bookmark-time">{formatTimestamp(bookmark.timestamp)}</span>
+          </button>
+        ))}
       </div>
     </section>
   );
@@ -467,7 +740,7 @@ function MiniTimeline({ frames, playhead, onJump }) {
       />
       <div className="mini-legend">
         <span><i className="mini-dot mini-dot-health" />Health</span>
-        <span><i className="mini-dot mini-dot-volatility" />Volatility</span>
+        <span><i className="mini-dot mini-dot-volatility" />Stress</span>
       </div>
     </div>
   );
@@ -523,11 +796,12 @@ function DataLandscape({
 
         {eventMarkers.map((marker) => (
           <g key={marker.id} transform={`translate(${marker.laneX}, ${marker.anchorY})`} className={`event-marker event-marker-${marker.tone}`}>
-            <line x1="0" y1="-30" x2="0" y2="0" className="event-stem" />
+            <line x1="0" y1="-40" x2="0" y2="4" className="event-stem" />
+            <circle cx="0" cy="0" r="9" className="event-halo" />
             <circle cx="0" cy="0" r="5" className="event-anchor" />
-            <rect x="-68" y="-64" width="136" height="24" rx="12" className="event-pill" />
-            <text x="0" y="-48" textAnchor="middle" className="event-label">{marker.label}</text>
-            <text x="0" y="-30" textAnchor="middle" className="event-detail">{marker.detail}</text>
+            <rect x="-82" y="-78" width="164" height="34" rx="12" className="event-pill" />
+            <text x="0" y="-58" textAnchor="middle" className="event-label">{marker.label}</text>
+            <text x="0" y="-43" textAnchor="middle" className="event-detail">{marker.detail}</text>
           </g>
         ))}
 
@@ -666,7 +940,10 @@ function DataLandscape({
 }
 
 function App() {
-  const { payload, error, loading } = useReplayData();
+  const [activePage, setActivePage] = useState('replay');
+  const [selectedSource, setSelectedSource] = useState(REPLAY_SOURCES[0].id);
+  const selectedReplaySource = REPLAY_SOURCES.find((source) => source.id === selectedSource) ?? REPLAY_SOURCES[0];
+  const { payload, error, loading } = useReplayData(selectedReplaySource.path);
   const [playhead, setPlayhead] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -679,6 +956,14 @@ function App() {
   const frames = payload?.frames ?? [];
   const frameCount = frames.length;
   const maxPlayhead = Math.max(frameCount - 1, 0);
+
+  useEffect(() => {
+    setPlayhead(0);
+    setIsPlaying(false);
+    setFocusedKey('');
+    setPinnedInfo('');
+    setActivePoint(null);
+  }, [selectedSource]);
 
   useEffect(() => {
     if (playhead > maxPlayhead) {
@@ -746,7 +1031,7 @@ function App() {
   if (error || !payload || !frame) {
     return (
       <main className="app-shell app-shell-center">
-        <h1 className="hero-title">Market Pressure Map</h1>
+        <h1 className="hero-title">Orderbook Organism</h1>
         <p className="status">{error || 'No replay frames found at /public/data/replay_frames.json'}</p>
       </main>
     );
@@ -763,6 +1048,17 @@ function App() {
   const priceChange = frameStats.currentPrice - previousStats.currentPrice;
   const events = buildEventMarkers(frame, previousFrame, frameStats, strikeMin, strikeMax);
   const diagnosis = buildFrameDiagnosis(frame, frameStats, priceChange);
+  const whyItMatters = buildWhyItMatters(events, diagnosis, frameStats);
+  const eventBookmarks = buildEventBookmarks(frames, strikeMin, strikeMax);
+
+  const jumpToFrame = (index) => {
+    setPlayhead(clamp(index, 0, maxPlayhead));
+    setIsPlaying(false);
+    setFocusedKey('');
+    setPinnedInfo('');
+    setActivePoint(null);
+    setActivePage('replay');
+  };
 
   return (
     <main className="app-shell">
@@ -776,24 +1072,40 @@ function App() {
           </span>
           <div>
             <p className="hero-bar-kicker">Biomimetic market replay</p>
-            <h1 className="hero-bar-title">Market Organism</h1>
+            <h1 className="hero-bar-title">Orderbook Organism</h1>
           </div>
           <span className={`demo-pill ${demoMode ? 'demo-pill-live' : ''}`}>
-            {demoMode ? 'Story mode' : 'Explore mode'}
+            {demoMode ? 'Guided tour' : 'Explore replay'}
           </span>
         </div>
         <p className="hero-bar-sub">Turns order-book flow into a readable pressure landscape.</p>
       </header>
 
+      <div className="top-controls">
+        <PageNav activePage={activePage} onChange={setActivePage} />
+        <ReplaySourcePicker selectedSource={selectedSource} onChange={setSelectedSource} />
+      </div>
+
       <section className="stage-panel">
+        {activePage === 'tour' ? (
+          <GuidedTourPage />
+        ) : null}
+
+        {activePage === 'glossary' ? (
+          <GlossaryPage />
+        ) : null}
+
+        {activePage === 'replay' ? (
+        <>
         <div className="stage-workspace">
           <ReadingGuide demoMode={demoMode} demoBeat={demoBeat} diagnosis={diagnosis} />
+          <EventBookmarks bookmarks={eventBookmarks} activeIndex={playhead} onJump={jumpToFrame} />
 
           {/* Full-width chart column */}
           <div className="chart-column">
             <div className="stage-header stage-header-inline">
               <div>
-                <p className="panel-kicker">{demoMode ? 'Story step' : 'Current frame'}</p>
+                <p className="panel-kicker">{demoMode ? 'Guided step' : 'Current frame'}</p>
                 <p className="stage-title">{demoMode ? demoBeat.title : formatTimestamp(frame.timestamp)}</p>
               </div>
               <p className="stage-progress">frame {Math.round(playhead) + 1} / {frameCount}</p>
@@ -806,7 +1118,7 @@ function App() {
               </div>
               <div className="plot-legend-item">
                 <span className="legend-swatch legend-swatch-volatility-line" />
-                Volatility
+                Stress line
               </div>
               <div className="plot-legend-item">
                 <span className="legend-swatch legend-swatch-bid" />
@@ -920,6 +1232,11 @@ function App() {
               </div>
             </div>
 
+            <div className="rail-section rail-section-why">
+              <p className="panel-kicker">{whyItMatters.title}</p>
+              <p className="detail-copy detail-copy-spaced">{whyItMatters.body}</p>
+            </div>
+
           </aside>
         </div>
 
@@ -973,7 +1290,7 @@ function App() {
                   setIsPlaying(true);
                 }}
               >
-                Story mode
+                Guided tour
               </button>
               <button
                 type="button"
@@ -1019,6 +1336,8 @@ function App() {
             </div>
           </div>
         </div>
+        </>
+        ) : null}
       </section>
     </main>
   );
