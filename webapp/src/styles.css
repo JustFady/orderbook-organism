@@ -37,6 +37,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  padding-bottom: 0.75rem;
 }
 
 .app-shell-center {
@@ -647,7 +648,7 @@ body {
 /* Bookmarks */
 .bookmark-panel,
 .content-page {
-  padding: 0.9rem;
+  padding: 0.85rem;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -663,21 +664,22 @@ body {
 .bookmark-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-  margin-top: 0.75rem;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
 }
 
 .bookmark-card {
   display: grid;
-  gap: 0.25rem;
-  min-height: 6.5rem;
-  padding: 0.75rem;
+  gap: 0.2rem;
+  min-height: auto;
+  padding: 0.7rem;
   text-align: left;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   cursor: pointer;
+  align-content: start;
 }
 
 .bookmark-card-active,
@@ -706,7 +708,7 @@ body {
 
 /* Content pages */
 .content-page {
-  min-height: 52vh;
+  min-height: auto;
 }
 
 .content-page-head {
@@ -724,8 +726,8 @@ body {
 .guide-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
 }
 
 .tour-card,
@@ -738,7 +740,9 @@ body {
 }
 
 .tour-section {
-  margin-top: 1.1rem;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .tour-step {
@@ -773,7 +777,7 @@ body {
 /* Dock panel */
 .dock-panel {
   display: block;
-  padding: 0.5rem;
+  padding: 0.45rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.03);
