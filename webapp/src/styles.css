@@ -222,6 +222,8 @@ body {
 
 .replay-main {
   min-width: 0;
+  display: grid;
+  gap: 0.75rem;
 }
 
 .replay-context-panel {
@@ -282,6 +284,19 @@ body {
 
 .context-card .event-chip {
   margin-top: 0.6rem;
+}
+
+.replay-context-panel .metric-grid-rail,
+.replay-context-panel .rail-mini-stats {
+  grid-template-columns: 1fr 1fr;
+}
+
+.replay-context-panel .price-strip-rail {
+  grid-template-columns: 1fr 1fr;
+}
+
+.replay-context-panel .price-strip-rail .price-box:last-child {
+  grid-column: 1 / -1;
 }
 
 .context-controls {

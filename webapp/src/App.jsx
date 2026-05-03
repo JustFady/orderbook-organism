@@ -544,6 +544,9 @@ function ReplayContextPanel({
   strikeMin,
   strikeMax,
   frame,
+  balance,
+  frameStats,
+  priceChange,
 }) {
   const primaryEvent = events[0];
 
@@ -647,6 +650,58 @@ function ReplayContextPanel({
             <p className="summary-value">{formatPercent(frame.order_density)}</p>
           </div>
         </div>
+      </section>
+
+      <section className="context-card" aria-label="Frame snapshot">
+        <p className="panel-kicker">Frame snapshot</p>
+        <h2 className="rail-title">{formatTimestamp(frame.timestamp)}</h2>
+        <div className="rail-mini-stats">
+          <div className="rail-stat">
+            <p className="panel-kicker">Health</p>
+            <p className="rail-stat-value">{frame.health_score.toFixed(2)}</p>
+          </div>
+          <div className="rail-stat">
+            <p className="panel-kicker">Flow lean</p>
+            <p className="rail-stat-value">{balance}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="context-card" aria-label="Current signals">
+        <p className="panel-kicker">Current signals</p>
+        <div className="metric-grid-rail">
+          <div className="metric-card">
+            <p className="metric-label">Liquidity</p>
+            <p className="metric-value">{formatPercent(frame.liquidity_density_factor)}</p>
+          </div>
+          <div className="metric-card">
+            <p className="metric-label">Stress</p>
+            <p className="metric-value">{formatPercent(frame.manipulation_factor)}</p>
+          </div>
+        </div>
+        <div className="price-strip-rail">
+          <div className="price-box">
+            <p className="panel-kicker">Weighted price</p>
+            <p className="price-value">{frameStats.currentPrice.toFixed(1)}</p>
+          </div>
+          <div className="price-box">
+            <p className="panel-kicker">Change</p>
+            <p className={`price-value ${priceChange >= 0 ? 'price-up' : 'price-down'}`}>{formatSigned(priceChange)}</p>
+          </div>
+          <div className="price-box">
+            <p className="panel-kicker">Spread</p>
+            <p className="price-value">{frameStats.spread.toFixed(1)}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="context-card" aria-label="Pressure focus">
+        <p className="panel-kicker">Pressure focus</p>
+        <h2 className="detail-title">Lane {frameStats.strongest.index + 1}</h2>
+        <p className="detail-copy">Strike {frameStats.strongest.strike}</p>
+        <p className="detail-copy detail-copy-spaced">
+          Highest combined ask and bid pressure. Marked with a gold ring.
+        </p>
       </section>
     </aside>
   );
@@ -1229,6 +1284,27 @@ function App() {
                   followPrice={followPrice}
                 />
               </div>
+
+              <div className="dock-panel" aria-label="Replay timeline">
+                <div className="dock-primary">
+                  <div className="panel-head">
+                    <label className="timeline-label" htmlFor="timeline">Replay timeline</label>
+                    <span className="timeline-caption">{formatTimestamp(frame.timestamp)}</span>
+                  </div>
+                  <MiniTimeline
+                    frames={frames}
+                    playhead={playhead}
+                    onJump={(value) => {
+                      setPlayhead(value);
+                      setIsPlaying(false);
+                      setDemoMode(false);
+                      setFocusedKey('');
+                      setPinnedInfo('');
+                      setActivePoint(null);
+                    }}
+                  />
+                </div>
+              </div>
             </div>
 
             <ReplayContextPanel
@@ -1251,90 +1327,9 @@ function App() {
               strikeMin={strikeMin}
               strikeMax={strikeMax}
               frame={frame}
-            />
-          </div>
-
-          <aside className="insight-rail" aria-label="Current frame insights">
-
-            {/* Card 1: Current frame + timestamp */}
-            <div className="rail-section rail-section-highlight">
-              <p className="panel-kicker">Current frame</p>
-              <h2 className="rail-title">{formatTimestamp(frame.timestamp)}</h2>
-              <div className="rail-mini-stats">
-                <div className="rail-stat">
-                  <p className="panel-kicker">Market health</p>
-                  <p className="rail-stat-value">{frame.health_score.toFixed(2)}</p>
-                  <p className="rail-stat-hint">Higher means calmer structure.</p>
-                </div>
-                <div className="rail-stat">
-                  <p className="panel-kicker">Flow lean</p>
-                  <p className="rail-stat-value">{balance}</p>
-                  <p className="rail-stat-hint">Which side dominates this frame.</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Metrics + Price */}
-            <div className="rail-section">
-              <p className="panel-kicker">Current signals</p>
-              <div className="metric-grid-rail">
-                <div className="metric-card">
-                  <p className="metric-label">Liquidity coverage</p>
-                  <p className="metric-value">{formatPercent(frame.liquidity_density_factor)}</p>
-                  <p className="metric-hint">Visible support across lanes.</p>
-                </div>
-                <div className="metric-card">
-                  <p className="metric-label">Stress signal</p>
-                  <p className="metric-value">{formatPercent(frame.manipulation_factor)}</p>
-                  <p className="metric-hint">Separation between sides.</p>
-                </div>
-              </div>
-              <div className="price-strip-rail">
-                <div className="price-box">
-                  <p className="panel-kicker">Weighted price</p>
-                  <p className="price-value">{frameStats.currentPrice.toFixed(1)}</p>
-                </div>
-                <div className="price-box">
-                  <p className="panel-kicker">Frame change</p>
-                  <p className={`price-value ${priceChange >= 0 ? 'price-up' : 'price-down'}`}>{formatSigned(priceChange)}</p>
-                </div>
-                <div className="price-box">
-                  <p className="panel-kicker">Lane spread</p>
-                  <p className="price-value">{frameStats.spread.toFixed(1)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Strongest lane */}
-            <div className="rail-section">
-              <p className="panel-kicker">Pressure focus</p>
-              <h2 className="detail-title">Lane {frameStats.strongest.index + 1}</h2>
-              <p className="detail-copy">Strike {frameStats.strongest.strike}</p>
-              <p className="detail-copy detail-copy-spaced">
-                This lane has the highest combined ask and bid pressure. It is marked on the chart with a gold ring.
-              </p>
-            </div>
-
-          </aside>
-        </div>
-
-        <div className="dock-panel" aria-label="Replay timeline">
-          <div className="dock-primary">
-            <div className="panel-head">
-              <label className="timeline-label" htmlFor="timeline">Replay timeline</label>
-              <span className="timeline-caption">{formatTimestamp(frame.timestamp)}</span>
-            </div>
-            <MiniTimeline
-              frames={frames}
-              playhead={playhead}
-              onJump={(value) => {
-                setPlayhead(value);
-                setIsPlaying(false);
-                setDemoMode(false);
-                setFocusedKey('');
-                setPinnedInfo('');
-                setActivePoint(null);
-              }}
+              balance={balance}
+              frameStats={frameStats}
+              priceChange={priceChange}
             />
           </div>
         </div>
