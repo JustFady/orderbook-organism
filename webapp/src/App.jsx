@@ -1185,11 +1185,7 @@ function App() {
             <p className="hero-bar-kicker">Biomimetic market replay</p>
             <h1 className="hero-bar-title">Orderbook Organism</h1>
           </div>
-          <span className={`demo-pill ${demoMode ? 'demo-pill-live' : ''}`}>
-            {demoMode ? 'Guided tour' : 'Explore replay'}
-          </span>
         </div>
-        <p className="hero-bar-sub">Turns order-book flow into a readable pressure landscape.</p>
       </header>
 
       <div className="top-controls">
