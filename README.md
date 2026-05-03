@@ -14,10 +14,10 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. In this repo, the app is configured with the base path `/cpsc481_project/`, so the local URL usually looks like:
+Open the local URL printed by Vite. In this repo, the app is configured with the base path `/orderbook-organism/`, so the local URL usually looks like:
 
 ```text
-http://127.0.0.1:5173/cpsc481_project/
+http://127.0.0.1:5173/orderbook-organism/
 ```
 
 If that port is busy, Vite will choose the next available port.
@@ -111,6 +111,27 @@ npm run build    # Build production static assets
 npm run preview  # Preview the production build
 ```
 
+## GitHub Pages Deployment
+
+The project is deployed from the `gh-pages` branch. Before deploying, make sure `webapp/vite.config.js` uses the repo base path:
+
+```js
+base: '/orderbook-organism/'
+```
+
+Deployment flow:
+
+```bash
+cd webapp
+npm run build
+```
+
+Then publish the contents of `webapp/dist/` to the repository's `gh-pages` branch. The public site should resolve at:
+
+```text
+https://justfady.github.io/orderbook-organism/
+```
+
 ## Streamlit Dashboard
 
 There is also a Streamlit dashboard for exploratory analysis:
@@ -138,4 +159,4 @@ That framing is what makes the prototype useful for review, presentation, and it
 - The source data includes a known header typo that preprocessing should handle: `cans ll_delta` should be treated as `call_delta`.
 - The web prototype is static by design. If replay data changes, regenerate/copy the JSON into `webapp/public/data/replay_frames.json`.
 - Build output is generated in `webapp/dist/`.
-- The app uses Vite's configured base path `/cpsc481_project/`, which matters for local URLs and deployment paths.
+- The app uses Vite's configured base path `/orderbook-organism/`, which matters for local URLs and deployment paths.

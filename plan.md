@@ -117,7 +117,7 @@ Streamlit-only lite mode is allowed only if:
 
 ## Repository Target Structure
 ```text
-cpsc481_project/
+orderbook-organism/
   parsed_scaled/
   analysis/
     cleaned/
