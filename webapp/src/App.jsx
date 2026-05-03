@@ -539,8 +539,6 @@ function ReplayContextPanel({
   setIsPlaying,
   setSpeed,
   speed,
-  followPrice,
-  setFollowPrice,
   strikeMin,
   strikeMax,
   frame,
@@ -595,21 +593,6 @@ function ReplayContextPanel({
           </button>
           <button
             type="button"
-            className="action-button action-button-emphasis"
-            onClick={() => {
-              setPlayhead(0);
-              setSpeed(1);
-              setDemoMode(true);
-              setFocusedKey(DEMO_BEATS[0].focus);
-              setPinnedInfo('');
-              setActivePoint(null);
-              setIsPlaying(true);
-            }}
-          >
-            Guided tour
-          </button>
-          <button
-            type="button"
             className="action-button action-button-muted"
             onClick={() => {
               setPlayhead(0);
@@ -631,13 +614,6 @@ function ReplayContextPanel({
               <option value={2}>2x</option>
             </select>
           </label>
-          <button
-            type="button"
-            className={`action-button ${followPrice ? 'action-button-emphasis' : ''}`}
-            onClick={() => setFollowPrice((value) => !value)}
-          >
-            {followPrice ? 'Follow price' : 'Unlock price'}
-          </button>
         </div>
 
         <div className="summary-grid summary-grid-dock">
@@ -897,7 +873,6 @@ function DataLandscape({
   activePoint,
   onHoverPoint,
   onLeavePoint,
-  followPrice,
 }) {
   const series = useMemo(() => buildSeries(frame, strikeMin, strikeMax), [frame, strikeMin, strikeMax]);
   const stats = useMemo(() => deriveFrameStats(series), [series]);
@@ -968,7 +943,7 @@ function DataLandscape({
         </g>
 
         <g>
-          <line x1={priceX} y1="160" x2={priceX} y2="620" className={`price-line ${followPrice ? 'price-line-follow' : ''}`} />
+          <line x1={priceX} y1="160" x2={priceX} y2="620" className="price-line price-line-follow" />
           <text x={priceX + 8} y="180" className="price-label">Mid {stats.currentPrice.toFixed(1)}</text>
         </g>
 
@@ -1089,7 +1064,6 @@ function App() {
   const [focusedKey, setFocusedKey] = useState('');
   const [pinnedInfo, setPinnedInfo] = useState('');
   const [activePoint, setActivePoint] = useState(null);
-  const [followPrice, setFollowPrice] = useState(true);
 
   const frames = payload?.frames ?? [];
   const frameCount = frames.length;
@@ -1281,7 +1255,6 @@ function App() {
                     setActivePoint(null);
                     setFocusedKey(demoMode ? demoBeat.focus : '');
                   }}
-                  followPrice={followPrice}
                 />
               </div>
 
@@ -1322,8 +1295,6 @@ function App() {
               setIsPlaying={setIsPlaying}
               setSpeed={setSpeed}
               speed={speed}
-              followPrice={followPrice}
-              setFollowPrice={setFollowPrice}
               strikeMin={strikeMin}
               strikeMax={strikeMax}
               frame={frame}
